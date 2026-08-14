@@ -1,0 +1,3 @@
+{"step": "00_environment_check", "elapsed_s": 0.267, "mem_before_mb": 26.4, "mem_after_mb": 58.8, "mem_delta_mb": 32.4, "mem_peak_gb": 0.06, "timestamp": "2026-07-27T08:38:34.709651"}
+{"step": "load_eigvecs", "elapsed_s": 4.24, "mem_before_mb": 58.8, "mem_after_mb": 6893.4, "mem_delta_mb": 6834.7, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T08:38:38.963914"}
+{"step": "load_eigvals", "elapsed_s": 0.002, "mem_before_mb": 6893.4, "mem_after_mb": 6893.4, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T08:38:38.973721"}

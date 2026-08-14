@@ -1,0 +1,328 @@
+% 分析报告：格点计算中重整化的物理理论与工作流
+\documentclass[UTF8]{ctexart}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{amsmath}
+\usepackage{longtable}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+\title{格点计算中重整化的物理理论与工作流\\ \large —— 基于 examples/zengch 的数据分析代码}
+\author{opencode analyze}
+\date{2026 年 8 月 13 日}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{gray!10},
+  frame=single,
+  breaklines=true,
+  language=Python,
+  firstnumber=auto,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本报告分析 \texttt{examples/zengch} 目录下胶子准分布（quasi-PDF）格点计算中的\textbf{重整化物理理论与代码工作流}。
+物理上，该项目在 LaMET 框架内采用\textbf{混合重整化方案}（hybrid scheme）：短距离（$z \le z_s$）用比值方案消去发散，
+长距离（$z > z_s$）用\textbf{自重整化}（self-renormalization）因子 $Z_R(z, 1/a)$ 重整化，$Z_R$ 通过对多个格距
+零动量矩阵元的全局拟合确定；随后经 $\lambda$ 外推、傅里叶变换得到准 PDF，用单圈匹配核匹配到光锥 PDF，
+最后做格距/动量/手征/体积联合外推。代码中每一物理环节均与公开文献（arXiv:2510.17758 的 Eq.(3)/(5)/(6)/(7)/(8) 等）逐项对应。
+覆盖范围：\texttt{examples/zengch} 全部 29 个 Python 脚本（9928 行）及参考知识库 \texttt{refer/}、\texttt{docs/} 相关文献。
+\end{abstract}
+
+\tableofcontents
+
+\section{仓库概览}
+
+\texttt{examples/zengch} 是 ZengCH 的 GPD/PDF 数据拟合分析脚本目录（29 个 Python 文件，共 9928 行），
+数据与结果均存放于集群路径 \texttt{/public/group/imp/zengch/LQCD/renorma/}（本机不解析）。
+
+git 分支 \texttt{main}，HEAD \texttt{c9078d9}（2026-08-13）。
+
+\subsection{脚本分工（readme.txt 的官方工作流）}
+
+\begin{lstlisting}[language={}]
+C_pt_load.py               :读取两点与三点关联函数，得到Ratio--------------------   delta_matirx  Ratio_data
+fit_ratio.py               :拟合ratio 得到 c0 (动量空间的准PDF)------------------   ratio_fit_result
+hB_data.py                 :插值得到 用于下一步 重整因子Z 拟合的c0 数据 ----------  hB_data
+fit_zr.py                  :拟合Pz = 0 的c0 得到重整因子Z------------------------   ZR_fit_result
+fit_hR_big_lambda.py       :对重整化后的准PDF作lambda外推并作傅里叶变换---------------    hR_x
+matching.py                :将准PDF 转化为光锥PDF--------------------------------   hR_PDF
+fit_pz_a_extrapolatiing.py :将得到的光锥PDF做格距和动量外推------------------------   hR_res
+fit_2pt.py / fit_E0.py     :2pt 关联函数与基态能量 E0 拟合
+\end{lstlisting}
+
+（来源：\texttt{\detokenize{readme.txt:1-20}}）
+
+重整化相关脚本核心为 \texttt{fit\_zr\_new.py}（ZR 拟合）、\texttt{fit\_hR\_big\_lambda*.py}（ZR 应用）、
+\texttt{matching*.py}（光锥匹配）；辅助脚本 \texttt{C\_pt\_load*.py}、\texttt{fit\_ratio*.py}、
+\texttt{hB\_data*.py} 提供输入数据。
+
+\subsection{参考知识库（已引入）}
+
+\begin{itemize}
+  \item \texttt{refer/理论解析与工作流.tex}（5 项）：第 1215--1434 行为完整"重整化理论"章节，提供理论主干；
+  \item \texttt{docs/}（81 项，按主题检索）：核心对照文献为
+        \texttt{First Self-Renormalized Gluon PDF of Nucleon from LaMET in the Continuum Limit.pdf}
+        （NieMiera, Good, Lin, Yao, arXiv:2510.17758）与
+        \texttt{Self-Renormalization of Quasi-Light-Front Correlators on the Lattice.pdf}（自重整化原始文献）；
+  \item \texttt{文档/基于格点QCD对部分子分布函数的研究.pdf}（李园园 2022 硕士论文，RI/MOM 重整化独立研究，背景参照）；
+  \item \texttt{books/}（13 项）为教材类，未命中本主题关键词。
+\end{itemize}
+
+\section{重整化的物理理论}
+
+\subsection{裸矩阵元的发散结构}
+
+格点上计算的裸矩阵元 $\tilde h_B(z, P_z, 1/a)$ 在连续极限下是发散的，涉及三种发散结构：
+Wilson 线自能的\textbf{线性发散}、复合算符的\textbf{对数发散}，以及可能的有限重整化
+（\texttt{\detokenize{refer/理论解析与工作流.tex:1218}}）。
+Wilson 线单圈自能给出 $\Sigma_W(z) = g_0^2 C_F |z|/a + $（对数项）
+（\texttt{\detokenize{refer/理论解析与工作流.tex:1234-1237}}），$|z|/a$ 项在 $a\to0$ 时发散，必须非微扰减除。
+自重整化原始文献中该形式写作
+$\langle \mathcal O_\Gamma(z) \rangle = \Gamma\big[1 + \gamma_g \frac{z}{2}\log(z^2/a^2) - m_{-1} z/a + \cdots\big]$
+（\texttt{\detokenize{docs/Self-Renormalization of Quasi-Light-Front Correlators on the Lattice.pdf}}，Eq.(3)）。
+
+\subsection{可乘可重整性与因子化}
+
+Li--Ma--Qiu 与 Ji--Zhang--Zhao 证明准夸克与准胶子算符在坐标空间可乘重整化，且胶子算符全部 36 个独立算符
+无混合（\texttt{\detokenize{refer/理论解析与工作流.tex:1242-1246}}）：
+\begin{equation}
+  \tilde h_R(z,\mu) = Z(z,a,\mu)\, \tilde h_B(z,a), \qquad
+  Z(z,a,\mu) = Z_L(a\mu)\,\exp\!\big(\delta m(a)\,|z|\big),
+\end{equation}
+其中 $Z_L$ 含对数发散，指数因子吸收线性发散（$\delta m \propto 1/a$）
+（\texttt{\detokenize{refer/理论解析与工作流.tex:1248-1252}}）。
+
+\subsection{比值方案（短距离）}
+
+最简单的重整化方案：$h_R(z,P_z) = h_B(z,P_z)/h_B(z,P_z=0)$，自动消去与 $z$ 无关的发散
+（\texttt{\detokenize{refer/理论解析与工作流.tex:1299-1311}}）。局限：线性发散 $\delta m |z|$ 未完全消去
+（\texttt{\detokenize{refer/理论解析与工作流.tex:1313-1318}}），故只适用于短距离。
+
+\subsection{混合重整化方案（本项目采用）}
+
+混合方案由 Ji, Liu, Sch\"afer, Wang, Yang, Zhang, Zhao (2021) 提出
+（\texttt{\detokenize{refer/理论解析与工作流.tex:1320-1333}}）：
+\begin{itemize}
+  \item 短距离 $z \le z_s$：比值方案 $h_R = h_B(z,P_z)/h_B(z,P_z{=}0)$；
+  \item 长距离 $z > z_s$：自重整化 $h_R = h_B(z,P_z)/h_B(z_s,P_z{=}0)\,\exp[(\delta m + m_0)(z - z_s)]$
+        （\texttt{\detokenize{refer/理论解析与工作流.tex:1335-1348}}）。
+\end{itemize}
+过渡尺度 $z_s$ 通常取 $0.2$--$0.4$ fm（\texttt{\detokenize{refer/理论解析与工作流.tex:1358-1364}}）。
+
+论文 arXiv:2510.17758 的混合方案公式（Eq.(3)）与本项目代码实现直接对应：
+\begin{equation}
+  \tilde h_R(z,P_z) = \frac{\tilde h_B(z,P_z,1/a)}{\tilde h_B(z,P_z{=}0,1/a)}\,\theta(z_s-|z|)
+    + T_s \frac{\tilde h_B(z,P_z,1/a)}{Z_R(z,1/a)}\,\theta(|z|-z_s),
+\end{equation}
+其中 $T_s$ 为衔接连续性的方案转换因子，$z_s$ 为短/长距离分界
+（\texttt{\detokenize{docs/First Self-Renormalized Gluon PDF of Nucleon from LaMET in the Continuum Limit.pdf}}，Eq.(3)）。
+
+\subsection{自重整化因子 $Z_R$ 的参数化}
+
+自重整化因子从零动量矩阵元的全局拟合确定：
+$\tilde h_B(z,P_z{=}0,1/a) = Z_R(z,1/a)\,\tilde h_R(z,P_z{=}0,1/a)$
+（arXiv:2510.17758 Eq.(4)）。其单圈 OPE 参数化形式（Eq.(5)）：
+\begin{equation}
+  Z_R(z,1/a) = \exp\!\Bigg[
+    \frac{kz}{a\ln[a\Lambda_{\rm QCD}]} + m_0 z + f(z)a^2
+    + \frac{5C_A}{3b_0}\ln\!\frac{\ln[1/(a\Lambda_{\rm QCD})]}{\ln[\mu/\Lambda_{\rm QCD}]}
+    + \ln\Big(1 + \frac{d}{\ln[a\Lambda_{\rm QCD}]}\Big)\Bigg],
+\end{equation}
+其中第一项线性发散、$m_0 z$ 吸收重整化质量平移、$f(z)a^2$ 为离散化误差、
+后两项为 lead/sub-leading 对数重求和（\texttt{\detokenize{docs/First Self-Renormalized Gluon PDF of Nucleon from LaMET in the Continuum Limit.pdf}}，Eq.(5)）。
+
+零动量矩阵元的分段拟合形式（Eq.(7)）：
+\begin{equation}
+  \ln\tilde h_B(z,P_z{=}0,1/a) = \ln[Z_R(z,1/a)] + 
+  \begin{cases} \ln[C_{0,\rm NLO}(z,\mu)], & z_0 \le z \le z_1,\\
+                  g(z) - m_0 z, & z_1 < z,
+  \end{cases}
+\end{equation}
+其中 $k,\Lambda_{\rm QCD}, f(z), d, m_0, g(z)$ 均为拟合自由参数（该工作取 $z_0=0.05$ fm、$z_1=0.36$ fm、$\mu=2$ GeV）。
+\subsubsection*{对照代码}
+\texttt{fit\_zr\_new.py} 中 \texttt{th\_hB}（50--122 行）与 \texttt{th\_ZR}（124--152 行）实现了上述
+Eq.(5)+Eq.(7)：线性发散项 \texttt{k*z/(a*log(a*Lambda))}、演化项 \texttt{5*CA/(3*b0)*log(...)}、
+次领头项 \texttt{0.5*log((1+d/log(a*Lambda))**2)}、质量平移 \texttt{(m0+m2*a**2)*z}、
+离散化 \texttt{f\_set*a\_set}，以及分段函数 \texttt{B(z)}（$z\le z_1=0.301$ fm 用微扰 $\ln Z_{\rm MS}$，
+$z>z_1$ 用非微扰节点 \texttt{g1..g14}）——与 Eq.(7) 完全对应。
+
+\subsection{NLO MS-bar 匹配系数 $C_{0,\rm NLO}$}
+
+胶子算符在 MS 方案下的 NLO Wilson 系数（arXiv:2510.17758 Eq.(6)）：
+\begin{equation}
+  C_{0,\rm NLO}(z,\mu) = 1 + \frac{\alpha_s(\mu^2)\,C_A}{4\pi}\Big[
+    \frac{5}{3}\ln\frac{z^2\mu^2}{4e^{-2\gamma_E}} + 3\Big],
+\end{equation}
+其中 $\gamma_E$ 为欧拉常数。
+\subsubsection*{对照代码}
+\texttt{fit\_zr\_new.py:39-48} 的 \texttt{Z\_MS(z,mu)} 逐项一致
+（系数 \texttt{5./3.*log(z**2*mu**2/(4*exp(-2*gammaE))) + 3}、\texttt{alpha\_s*CA/(4*pi)}）。
+该函数用于小 $z$ 区域的微扰锚点（\texttt{th\_hB} 内 \texttt{B(z)} 的 $z\le z_1$ 分支）。
+
+\subsection{$\lambda$（Ioffe 时间）外推与傅里叶变换}
+
+为避免准 PDF 中的非物理振荡，重整化矩阵元须外推到数据覆盖之外的更大距离。采用外推 ansatz
+（arXiv:2510.17758 Eq.(8)，$\nu = z P_z$）：
+\begin{equation}
+  h_R(z,P_z) \approx A\,\frac{e^{-m\nu}}{|\nu|^b},
+\end{equation}
+\subsubsection*{对照代码}
+\texttt{fit\_hR\_big\_lambda.py:178-182}：\texttt{hR\_lambda\_fit\_form = l1*lambda**(-a1)*exp(-lambda/lambda0)}，
+与 $A e^{-m\nu}/|\nu|^b$ 同构；对每个 bootstrap 样本独立拟合（184--270 行），
+$\lambda<\lambda_{\rm extra}$ 区间用插值、之外用外推形式拼接（416--432 行），
+最后傅里叶变换 $h_R(x) = \frac{2}{2\pi}\int\! d\lambda\, h_R(\lambda)\cos(x\lambda)$（434--459 行）得到动量空间准 PDF。
+
+\subsection{单圈光锥匹配}
+
+准 PDF 经微扰匹配核转成光锥 PDF：$h_{\rm PDF} = \mathcal Z^{-1} \tilde h_R$，其中
+$\mathcal Z_{ij} = \delta_{ij} + \frac{\alpha_s C_A}{2\pi} dx\, \mathcal M_{ij}$
+（\texttt{\detokenize{matching.py:116-126}}）。匹配核 $g(\xi)$ 在 $\xi<0$、$0<\xi<1$、$\xi>1$ 三段不同，
+$0<\xi<1$ 段含 $\ln[\mu^2/(4y^2P_z^2)]$ 与 $(1-\xi+\xi^2)^2$ 因子（\texttt{\detokenize{matching.py:86-113}}），
+$g_0$ 含 $\mathrm{Si}$ 函数与 $\lambda_s = 0.3\,{\rm fm}\times P_z$（有限距离/红外正则项，\texttt{\detokenize{matching.py:64,98-101}}）。
+
+\subsection{连续极限联合外推}
+
+对每个 $x$ 点，将多个格距、多个动量的光锥 PDF 联合外推到连续极限与物理夸克质量
+（\texttt{\detokenize{fit_pz_a_extrapolatiing.py:32-38}}）：
+\begin{equation}
+  f(x) = xg_0 + a^2 f_x + a^4 l_x + a^2 p_z^2 h_x + \frac{d_x}{p_z^2} + \frac{b_x}{p_z}
+       + k_x (m_\pi^2 - m_{\pi,\rm phy}^2) + c_x\, e^{-L a m_\pi},
+\end{equation}
+即 $a\to0$（$a^2, a^4$）、$P_z\to\infty$（$1/P_z^2, 1/P_z$）、手征（$m_\pi^2$）、有限体积（$e^{-La m_\pi}$）修正。
+
+\section{代码工作流（端到端）}
+
+\begin{enumerate}
+  \item \texttt{C\_pt\_load*.py}：读入 2pt/3pt 关联函数（\texttt{delta\_matrix}），构造
+        $R(z,t_{\rm sep},t_{\rm ins})$ 比率（\texttt{\detokenize{C_pt_load.py:364-436}}），存 \texttt{Ratio\_data}；
+  \item \texttt{fit\_ratio\_FeynmenHellman\_new.py}：对 FH 差分比率按 $t_{\rm sep}$ 窗口拟合常数 \texttt{c0}
+        （逐 bootstrap 样本，Minuit，\texttt{\detokenize{fit_ratio_FeynmenHellman_new.py:23-94}}），
+        存 \texttt{ratio\_tsep\_tisep\_FeynmenHellman/.../z\{i\}\_tsep...csv}；
+  \item \texttt{hB\_data\_FeynmenHellman.py}：读 \texttt{c0}，按 $z=0$ 归一化，线性插值到
+        $z\in[0.15,1.0]$ fm，取对数得 \texttt{loghB}（\texttt{\detokenize{hB_data_FeynmenHellman.py:32-98}}）；
+        9 组格点参数表：$a \in \{0.105,0.0897,0.0775,0.0688,0.0519\}$ fm、$N_t$、$m_\pi$
+        （\texttt{\detokenize{hB_data_FeynmenHellman.py:19-29}}）；
+  \item \texttt{fit\_zr\_new.py}：用 Pz=0 的 \texttt{loghB} 对 5 组格点（L24x72/L32x64/L32x96/L36x108/L48x144）
+        做全局 $\chi^2$ 拟合，得参数 $k,d,m_0,m_2,\Lambda_{\rm QCD},g_{1..14},f_{1,2}$
+        （\texttt{\detokenize{fit_zr_new.py:154-284}}），存 \texttt{result/ZR\_fit\_result/ZR\_a5\_FeynmenHellman\_new\_mu\{mu\}.csv}；
+  \item \texttt{fit\_hR\_big\_lambda*.py}：读 ZR 参数 → 计算 $Z_R(z)$ → 按混合方案重整化
+        $z\le z_s$ 用比率、$z>z_s$ 用 $h_B/Z_R\times\eta_s$（$\eta_s = Z_R(z_s)/h_B(z_s,P_z{=}0)$ 即 $T_s$）
+        （\texttt{\detokenize{fit_hR_big_lambda.py:137-161}}）→ $\lambda$ 外推 → 傅里叶变换 → 准 PDF \texttt{hR\_x}；
+  \item \texttt{matching*.py}：单圈匹配核 → 光锥 PDF \texttt{hR\_PDF}
+        （\texttt{\detokenize{matching.py:47-135}}）；\texttt{matching\_MPI.py} 为 8 组格点的 MPI 并行版；
+  \item \texttt{fit\_pz\_a\_extrapolatiing.py}：逐 $x$ 联合外推（$a, P_z, m_\pi, L$），存 \texttt{hR\_res}
+        （\texttt{\detokenize{fit_pz_a_extrapolatiing.py:75-206}}）。
+\end{enumerate}
+
+运行入口：Slurm 脚本 \texttt{a\_sbatch}（\texttt{\detokenize{a_sbatch:1-13}}）、\texttt{myjob}；
+拟合工具 \texttt{iminuit}（\texttt{Minuit} + 自定义 \texttt{cost\_function}），协方差 \texttt{covariance\_matrix(...,'boot')}。
+
+\section{关键代码片段}
+
+\subsection{自重整化因子 $Z_R$（th\_ZR，与论文 Eq.(5) 逐项对应）}
+
+\lstinputlisting[firstline=124,lastline=152]{/root/lattice-pdf/examples/zengch/fit_zr_new.py}
+
+\subsection{NLO MS-bar 匹配系数（Z\_MS，对应 Eq.(6)）}
+
+\lstinputlisting[firstline=39,lastline=48]{/root/lattice-pdf/examples/zengch/fit_zr_new.py}
+
+\subsection{零动量矩阵元分段参数化（th\_hB 的 B(z) 与主项，对应 Eq.(7)）}
+
+\lstinputlisting[firstline=84,lastline=122]{/root/lattice-pdf/examples/zengch/fit_zr_new.py}
+
+\subsection{混合方案重整化应用（hR\_z\_Pz，对应论文 Eq.(3)）}
+
+\lstinputlisting[firstline=137,lastline=161]{/root/lattice-pdf/examples/zengch/fit_hR_big_lambda.py}
+
+\subsection{$\lambda$ 外推形式（对应 Eq.(8)）}
+
+\lstinputlisting[firstline=178,lastline=182]{/root/lattice-pdf/examples/zengch/fit_hR_big_lambda.py}
+
+\subsection{单圈匹配核（g\_2，$0<\xi<1$ 分支）}
+
+\lstinputlisting[firstline=90,lastline=93]{/root/lattice-pdf/examples/zengch/matching.py}
+
+\section{公式与代码对照表}
+
+\begin{longtable}{@{}l l l@{}}
+\toprule
+\textbf{物理量} & \textbf{论文公式} & \textbf{代码位置} \\
+\midrule
+\endhead
+混合方案拼接 (Eq.3) & arXiv:2510.17758 Eq.(3) & \texttt{fit\_hR\_big\_lambda.py:149-157} \\
+$Z_R$ 参数化 (Eq.5) & arXiv:2510.17758 Eq.(5) & \texttt{fit\_zr\_new.py:124-152} \\
+$C_{0,\rm NLO}$ (Eq.6) & arXiv:2510.17758 Eq.(6) & \texttt{fit\_zr\_new.py:39-48} \\
+分段拟合 (Eq.7) & arXiv:2510.17758 Eq.(7) & \texttt{fit\_zr\_new.py:50-122} \\
+大 $\nu$ 外推 (Eq.8) & arXiv:2510.17758 Eq.(8) & \texttt{fit\_hR\_big\_lambda.py:178-182} \\
+匹配核 $\mathcal Z$ & 单圈匹配（Wang--Zhao--Zhu 形式） & \texttt{matching.py:86-126} \\
+离散/动量/手征/体积外推 & 联合外推 ansatz & \texttt{fit\_pz\_a\_extrapolatiing.py:32-38} \\
+\bottomrule
+\end{longtable}
+
+\section{参考源清单}
+
+\begin{longtable}{@{}l l p{7cm}@{}}
+\toprule
+\textbf{参考源} & \textbf{类型} & \textbf{内容/作用} \\
+\midrule
+\endhead
+\texttt{readme.txt:1-20} & 仓库 & 官方工作流总览（8 步链） \\
+\texttt{C\_pt\_load.py:364-436} & 仓库 & 3pt/2pt 比率构造 \\
+\texttt{fit\_ratio\_FeynmenHellman\_new.py:23-94} & 仓库 & c0 拟合（FH 差分比率） \\
+\texttt{hB\_data\_FeynmenHellman.py:19-98} & 仓库 & 物理参数表、loghB 预处理 \\
+\texttt{fit\_zr\_new.py:39-152} & 仓库 & Z\_MS、th\_hB、th\_ZR（重整化核心） \\
+\texttt{fit\_zr\_new.py:154-284} & 仓库 & 5 格点全局 ZR 拟合 \\
+\texttt{fit\_hR\_big\_lambda.py:137-182} & 仓库 & 混合方案重整化、$\lambda$ 外推 \\
+\texttt{fit\_hR\_big\_lambda.py:434-459} & 仓库 & 傅里叶变换→准 PDF \\
+\texttt{matching.py:47-135} & 仓库 & 单圈匹配→光锥 PDF \\
+\texttt{fit\_pz\_a\_extrapolatiing.py:32-38,75-206} & 仓库 & 连续极限联合外推 \\
+\texttt{a\_sbatch:1-13} / \texttt{myjob:1-11} & 仓库 & Slurm 运行入口 \\
+\texttt{refer/理论解析与工作流.tex:1215-1434} & 参考 & 重整化理论章节（发散结构/比值/混合/自重整化/RI-MOM） \\
+\texttt{docs/First Self-Renormalized Gluon PDF...pdf} & 参考 & Eq.(3)-(8) 公式出处（arXiv:2510.17758） \\
+\texttt{docs/Self-Renormalization of Quasi-Light-Front Correlators on the Lattice.pdf} & 参考 & 自重整化原始文献（线性发散 Eq.(3)） \\
+\texttt{docs/A Hybrid Renormalization Scheme...pdf} & 参考 & 混合方案原始文献（arXiv:2008.03886） \\
+\texttt{文档/基于格点QCD对部分子分布函数的研究.pdf} & 参考 & RI/MOM 重整化独立研究（李园园 2022 硕士论文，背景） \\
+\bottomrule
+\end{longtable}
+
+\section{结论与局限}
+
+\subsection{结论}
+
+\begin{enumerate}
+  \item \textbf{方案判定}：\texttt{examples/zengch} 的胶子准分布重整化采用\textbf{混合重整化方案}
+        （短距比值 + 长距自重整化），而非 RI/MOM 或纯比值方案；
+  \item \textbf{理论实现完整}：线性发散（$kz/(a\ln a\Lambda)$ + $m_0z$）、对数演化（$5C_A/(3b_0)\ln...$）、
+        次领头对数（$d$ 项）、离散化（$f(z)a^2$）与 NLO MS-bar 锚点（$C_{0,\rm NLO}$）全部在
+        \texttt{fit\_zr\_new.py} 中逐项实现；
+  \item \textbf{与文献逐项对应}：$Z_R$ 参数化、混合拼接、大 $\nu$ 外推与 arXiv:2510.17758（NieMiera 等 2025）
+        及自重整化原始文献公式一致，说明该项目采用学界成熟方案（LPC 谱系）；
+  \item \textbf{统计方法}：所有拟合（ZR、$\lambda$ 外推、连续极限）均逐 bootstrap 样本进行，
+        用协方差矩阵（'boot'）构造 $\chi^2$，符合格点数据分析惯例；
+  \item \textbf{外推链完整}：$\lambda$ 外推 → 准 PDF → 光锥匹配 → $(a, P_z, m_\pi, L)$ 联合外推，
+        形成端到端流水线。
+\end{enumerate}
+
+\subsection{局限}
+
+\begin{itemize}
+  \item 数据（\texttt{renorma/} 目录）与配置 JSON（含 $z_s$、$t_{\rm sep}$ 窗口等）在集群，本机无法验证拟合数值；
+  \item 线性发散参数化的物理含义（如 $k, m_0$ 与 $\Lambda_{\rm QCD}$ 的强关联，见 arXiv:2510.17758 的讨论）
+        属全局拟合"谷区"问题，需人工核验 CSV 结果（\texttt{result/ZR\_fit\_result/}）；
+  \item 匹配核 $g_0$ 的 $\lambda_s$ 项为有限 $z$ 修正，其截断引入的系统误差未在代码中量化；
+  \item \texttt{fit\_hR\_big\_lambda.py:64} 等处以注释形式保存的旧公式未清理，阅读时注意区分；
+  \item 参考知识库 \texttt{books/}（13 项教材）未命中主题关键词，未引入报告正文。
+\end{itemize}
+
+\end{document}

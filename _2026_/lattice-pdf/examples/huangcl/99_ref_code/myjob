@@ -1,0 +1,11 @@
+#!/bin/bash
+
+
+#SBATCH --job-name=jobname
+#SBATCH --partition=queue
+#SBATCH --ntasks-per-node pernode
+#SBATCH --nodes=1
+
+python fit_ratio.py
+
+

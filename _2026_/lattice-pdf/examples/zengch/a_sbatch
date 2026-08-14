@@ -1,0 +1,13 @@
+#!/bin/bash
+
+
+#SBATCH --job-name=test
+#SBATCH --partition=cpueicc,cpu6248R,i72c512g
+#SBATCH --ntasks-per-node 1
+#SBATCH --nodes=1
+
+
+#python fit_ratio.py
+#python fit_zr.py
+python C_pt_load.py
+#python ratio_match_average_xyz_direct.py

@@ -1,0 +1,3 @@
+{"step": "00_environment_check", "elapsed_s": 0.168, "mem_before_mb": 312.5, "mem_after_mb": 342.8, "mem_delta_mb": 30.3, "mem_peak_gb": 0.33, "timestamp": "2026-07-27T08:55:19.053203", "gpu_free_before_mb": 7099.0, "gpu_free_after_mb": 7099.0}
+{"step": "load_eigvecs", "elapsed_s": 9.43, "mem_before_mb": 342.8, "mem_after_mb": 6895.9, "mem_delta_mb": 6553.1, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T08:55:28.516057", "gpu_free_before_mb": 7099.0, "gpu_free_after_mb": 7099.0}
+{"step": "04_final_report", "elapsed_s": 0.001, "mem_before_mb": 6895.9, "mem_after_mb": 6895.9, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T08:55:28.872843", "gpu_free_before_mb": 6967.0, "gpu_free_after_mb": 6967.0}

@@ -1,0 +1,1290 @@
+% ============================================================================
+% PyQUDA — 完整技术文档
+% Python wrapper for QUDA — GPU-accelerated Lattice QCD
+% ============================================================================
+\documentclass[12pt,a4paper]{ctexart}
+
+% ---------- Packages ----------
+\usepackage[hmargin=2.5cm,vmargin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{fancyhdr}
+\usepackage{titling}
+\usepackage{tcolorbox}
+\usepackage{amsmath,amssymb}
+\usepackage{fontspec}
+\setmonofont{DejaVu Sans Mono}[Scale=0.88]
+
+% ---------- Code Listing Style ----------
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{keyword}{RGB}{0,0,180}
+\definecolor{string}{RGB}{0,128,0}
+\definecolor{comment}{RGB}{128,128,128}
+
+\lstdefinestyle{pycode}{
+    backgroundcolor=\color{codebg}, frame=single, rulecolor=\color{codeframe},
+    basicstyle=\footnotesize\ttfamily, keywordstyle=\color{keyword}\bfseries,
+    stringstyle=\color{string}, commentstyle=\color{comment}\itshape,
+    breaklines=true, showstringspaces=false, numbers=left,
+    numberstyle=\tiny\color{gray}, numbersep=5pt, tabsize=4, language=Python,
+}
+\lstdefinestyle{bashcode}{
+    backgroundcolor=\color{codebg}, frame=single, rulecolor=\color{codeframe},
+    basicstyle=\footnotesize\ttfamily, breaklines=true, showstringspaces=false,
+    numbers=left, numberstyle=\tiny\color{gray}, numbersep=5pt, language=bash,
+}
+
+\tcbuselibrary{skins,breakable}
+
+% ---------- Metadata ----------
+\title{{\Huge\bfseries PyQUDA}\\[4pt]
+       {\large 完整技术文档}\\[4pt]
+       {\normalsize Python Wrapper for QUDA — GPU-Accelerated Lattice QCD}}
+\author{}
+\date{2026年7月20日}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small PyQUDA 技术文档}
+\fancyhead[R]{\small \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\vspace{2cm}
+\begin{center}
+\begin{tcolorbox}[width=0.85\textwidth,boxrule=0.8pt,colback=blue!3!white,colframe=blue!40!black]
+\centering
+\textbf{项目地址：}\url{https://github.com/CLQCD/PyQUDA.git}
+
+\textbf{许可证：}MIT
+
+\textbf{Python 版本要求：}3.8+
+
+\textbf{当前版本：}0.10.53
+\end{tcolorbox}
+\end{center}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{项目概述}
+% ============================================================================
+
+PyQUDA 是 QUDA\footnote{QUDA: QCD on CUDA — 基于 CUDA/HIP/SYCL 的格点 QCD GPU 库} 的 Python 封装，使用 Cython 编写。它使格点 QCD 研究者能够从 Python 中利用 GPU 加速进行高性能计算，同时受益于 CuPy/PyTorch/NumPy 等优化数值库。
+
+\subsection{设计目标}
+
+\begin{itemize}[itemsep=3pt]
+    \item \textbf{Python 优先}：所有 API 均为 Pythonic 风格，支持 NumPy/CuPy/PyTorch 数组互操作
+    \item \textbf{多 GPU 支持}：通过 mpi4py 实现 MPI 分布式计算
+    \item \textbf{多后端}：支持 CUDA、ROCm/HIP、SYCL（Intel GPU）三种 GPU 后端
+    \item \textbf{完整功能}：覆盖夸克传播子、HMC、规范固定、规范 smearing、梯度流等
+\end{itemize}
+
+\subsection{核心功能}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{功能类别} & \textbf{具体内容} \\
+\midrule
+文件 I/O  & Chroma (QIO/LIME)、MILC、KYU、XQCD、NERSC、OpenQCD、ILDG、NPY、HDF5 \\
+夸克传播子 & 各向同性/异性 Wilson、Clover（含多网格）、HISQ \\
+HMC       & 规范作用量 + Clover/HISQ 费米子作用量 \\
+规范固定  & Landau 规范（over-relaxation 方法）\\
+规范 smearing & 3D/4D APE、Stout、HYP \\
+费米子 smearing & Gaussian（Wuppertal）\\
+梯度流    & Wilson/Symanzik 流（含费米子伴随流）\\
+多网格    & 用于 Wilson/Clover 费米子的几何/代数多网格预条件子 \\
+插件系统  & 自动从 C 头文件生成 Cython 封装 \\
+\bottomrule
+\end{tabular}
+\caption{PyQUDA 核心功能清单}
+\end{table}
+
+\subsection{包结构}
+
+PyQUDA 分为三个 PyPI 包：
+\begin{itemize}[itemsep=2pt]
+    \item \textbf{PyQUDA}（\texttt{pyquda\_core/}）：核心 Cython 绑定，直接封装 QUDA C API
+    \item \textbf{PyQUDA-Utils}（\texttt{pyquda\_utils/}）：高层工具函数（反演、源构造、相位因子、I/O 辅助）
+    \item \textbf{PyQUDA-IO}（\texttt{pyquda\_io/}）：低级文件 I/O，支持 9 种格点数据格式
+\end{itemize}
+
+% ============================================================================
+\section{安装指南}
+% ============================================================================
+
+\subsection{前置条件}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{组件} & \textbf{要求} \\
+\midrule
+Python              & $\ge$ 3.8 \\
+QUDA                & 从源码编译安装（develop 分支，commit $\ge$ PR\#1489）\\
+MPI                 & mpi4py \\
+GPU 后端（任选一）  & CuPy（CUDA/ROCm）或 PyTorch 或 DPNP（Intel）\\
+编译工具链          & Cython, C/C++ 编译器, CUDA/HIP/SYCL 编译器 \\
+\bottomrule
+\end{tabular}
+\caption{前置条件}
+\end{table}
+
+\subsection{从 PyPI 安装（推荐）}
+
+\begin{lstlisting}[style=bashcode]
+export QUDA_PATH=/path/to/quda/build/usqcd
+python3 -m pip install pyquda pyquda-utils
+\end{lstlisting}
+
+\subsection{从源码安装}
+
+\begin{lstlisting}[style=bashcode]
+export QUDA_PATH=/path/to/quda/build/usqcd
+git clone --recursive https://github.com/CLQCD/PyQUDA.git
+cd PyQUDA/pyquda_core
+python3 -m pip install .
+cd ..
+python3 -m pip install .
+\end{lstlisting}
+
+\subsection{开发模式安装（就地构建）}
+
+\begin{lstlisting}[style=bashcode]
+export QUDA_PATH=/path/to/quda/build/usqcd
+git clone --recursive https://github.com/CLQCD/PyQUDA.git
+cd PyQUDA/pyquda_core
+python3 setup.py build_ext --inplace
+cd ..
+python3 setup.py egg_info
+ln -s pyquda_core/pyquda_comm ./
+ln -s pyquda_core/pyquda ./
+\end{lstlisting}
+
+\textbf{注意}：使用开发模式时，需要在运行脚本前将项目根目录添加到 \texttt{sys.path}。
+
+% ============================================================================
+\section{初始化配置}
+% ============================================================================
+
+\subsection{基本初始化}
+
+PyQUDA 通过 \texttt{pyquda.init()} 函数完成所有初始化：
+
+\begin{lstlisting}[style=pycode]
+from pyquda import init
+from pyquda_utils import core
+
+# 基本初始化（4D 格点：4x4x4x8）
+init([1, 1, 1, 1], [4, 4, 4, 8], backend="cupy")
+\end{lstlisting}
+
+\subsection{完整初始化参数}
+
+\begin{lstlisting}[style=pycode]
+def init(
+    grid_size: Optional[List[int]] = None,      # MPI 网格大小
+    latt_size: Optional[List[int]] = None,      # 全局格点大小 [Lx, Ly, Lz, Lt]
+    grid_map: GridMapType = "default",          # MPI 网格映射策略
+    backend: BackendType = "cupy",              # 数组后端
+    backend_target: str = quda_define.target(), # GPU 目标
+    init_quda: bool = True,                     # 是否初始化 QUDA
+    use_malloc_quda: bool = False,              # 使用 QUDA 自定义分配器
+    *,
+    resource_path: str = "",                    # QUDA 资源路径
+    rank_verbosity: List[int] = [0],            # MPI rank 详细度
+    enable_mps: bool = False,                   # 启用 MPS
+    enable_gdr: bool = False,                   # 启用 GPU Direct RDMA
+    enable_p2p: int = 3,                        # P2P 通信策略
+    enable_tuning: bool = True,                 # 启用自动调优
+    enable_device_memory_pool: bool = True,     # 启用设备内存池
+    enable_pinned_memory_pool: bool = True,     # 启用锁页内存池
+    enable_managed_memory: bool = False,        # 启用托管内存
+    deterministic_reduce: bool = False,         # 确定性归约
+    device_reset: bool = False,                 # 设备重置
+    max_multi_rhs: int = 0,                     # 最大多右端量
+    ...
+)
+\end{lstlisting}
+
+\textbf{网格映射类型}（\texttt{grid\_map}）：
+\begin{itemize}[itemsep=2pt]
+    \item \texttt{"default"} — 默认映射
+    \item \texttt{"t\_fastest"} — t 方向最快
+    \item \texttt{"x\_fastest"} — x 方向最快
+    \item \texttt{"minimize"} — 最小化通信面
+    \item \texttt{"shared"} — 共享内存
+    \item \texttt{"dist\_graph"} — 分布式图
+\end{itemize}
+
+\textbf{数组后端}（\texttt{backend}）：\texttt{"numpy"}, \texttt{"cupy"}, \texttt{"torch"}, \texttt{"dpnp"}
+
+\textbf{精度预设}：
+\begin{itemize}[itemsep=2pt]
+    \item \texttt{"none"} — 双精度所有层级
+    \item \texttt{"invert"} — 混合精度反演
+    \item \texttt{"multishift"} — 多 shift 反演精度
+    \item \texttt{"multigrid"} — 多网格精度配置
+\end{itemize}
+
+\subsection{QUDA 环境变量}
+
+\begin{lstlisting}[style=bashcode]
+export QUDA_RESOURCE_PATH=/path/to/tuning/cache
+export QUDA_ENABLE_TUNING=1
+export QUDA_ENABLE_DEVICE_MEMORY_POOL=1
+export QUDA_ENABLE_PINNED_MEMORY_POOL=1
+\end{lstlisting}
+
+% ============================================================================
+\section{格点场类型}
+% ============================================================================
+
+PyQUDA 的核心数据结构是格点场（Lattice Field），存储在 GPU 显存中，具有特定的 even-odd 排序。
+
+\subsection{LatticeInfo —— 格点几何信息}
+
+\begin{lstlisting}[style=pycode]
+class LatticeInfo:
+    """
+    描述格点几何的参数容器。
+
+    Nd = 4         # 时空维度
+    Ns = 4         # 自旋分量数
+    Nc = 3         # 颜色数
+    """
+    def __init__(self, global_size: List[int],
+                 t_boundary: int = 1,
+                 anisotropy: float = 1.0): ...
+
+    # 属性
+    global_size: List[int]     # 全局格点大小 [Lx, Ly, Lz, Lt]
+    size: List[int]            # 本地格点大小
+    grid_size: List[int]       # MPI 网格大小
+    grid_coord: List[int]      # 当前 rank 坐标
+    volume: int                # 本地格点总体积 (Lx*Ly*Lz*Lt // 2)
+    GLt: int                   # 全局时间方向大小
+    Lt: int                    # 本地时间方向大小
+\end{lstlisting}
+
+\subsection{规范场}
+
+\begin{lstlisting}[style=pycode]
+class LatticeLink(latt_info, value=None):
+    """单方向 SU(3) 链接变量
+    形状: [2, Lt, Lz, Ly, Lx//2, Nc, Nc]"""
+
+class LatticeGauge(latt_info, L5=4, value=None):
+    """完整规范场（4 个方向）
+    形状: [4, 2, Lt, Lz, Ly, Lx//2, Nc, Nc]"""
+
+    # 核心方法
+    def use()                     # 加载到 QUDA 并返回句柄
+    def pack() / unpack()         # 打包/解包（用于通信）
+    def covDev(x, mu)             # 协变导数
+    def laplace(x, laplace3D)     # 拉普拉斯算子
+
+    # Smearing
+    def apeSmear(n_steps, alpha, ...)
+    def stoutSmear(n_steps, rho, ...)
+    def hypSmear(n_steps, alpha0, alpha1, alpha2, ...)
+
+    # 梯度流
+    def wilsonFlow(flow_time, n_steps, ...)
+    def symanzikFlow(flow_time, n_steps, ...)
+    def wilsonFlowScale(flow_time, n_steps, ...)
+
+    # 可观测量
+    def plaquette()               # 平均 plaquette
+    def polyakovLoop()            # Polyakov 圈
+    def energy()                  # 能量密度
+    def qcharge() / qchargeDensity()  # 拓扑荷
+
+    # 规范固定
+    def fixingOVR(n_steps, tol, ...)   # Over-relaxation
+    def fixingFFT(n_steps, tol, ...)   # FFT 加速
+
+    # 随机数
+    def gauss(seed)               # 高斯随机规范场
+
+    # HDF5 I/O
+    def loadH5(path) / saveH5(path) / appendH5(path) / updateH5(path)
+
+class LatticeMom(latt_info, L5=4):
+    """动量场（SU(3) 李代数）"""
+
+class LatticeRotation(latt_info):
+    """规范旋转场（用于规范固定）"""
+
+class LatticeClover(latt_info):
+    """Clover 项场"""
+\end{lstlisting}
+
+\subsection{费米子场（Wilson 型）}
+
+\begin{lstlisting}[style=pycode]
+class LatticeFermion(latt_info):
+    """单个费米子场
+    形状: [2, Lt, Lz, Ly, Lx//2, Ns, Nc]"""
+
+class HalfLatticeFermion(latt_info):
+    """Even/odd 半费米子场"""
+
+class MultiLatticeFermion(latt_info, L5):
+    """多右端量费米子场
+    形状: [L5, 2, Lt, Lz, Ly, Lx//2, Ns, Nc]"""
+
+class MultiHalfLatticeFermion(latt_info, L5):
+    """多右端量半费米子场"""
+
+class LatticePropagator(latt_info):
+    """完全传播子
+    形状: [2, Lt, Lz, Ly, Lx//2, Ns, Ns, Nc, Nc]"""
+    # 支持 @ 运算符用于 gamma 矩阵乘法
+\end{lstlisting}
+
+\subsection{费米子场（Staggered 型）}
+
+\begin{lstlisting}[style=pycode]
+class LatticeStaggeredFermion(latt_info):
+    """Staggered 费米子场，形状: [2, Lt, Lz, Ly, Lx//2, Nc]"""
+
+class HalfLatticeStaggeredFermion(latt_info): ...
+class MultiLatticeStaggeredFermion(latt_info, L5): ...
+class MultiHalfLatticeStaggeredFermion(latt_info, L5): ...
+
+class LatticeStaggeredPropagator(latt_info):
+    """Staggered 传播子，形状: [2, Lt, Lz, Ly, Lx//2, Nc, Nc]"""
+\end{lstlisting}
+
+\subsection{Even-Odd 与 Lexicographic 转换}
+
+\begin{lstlisting}[style=pycode]
+def lexico(data: NDArray, axes: List[int], dtype=None) -> NDArray:
+    """Even-odd → Lexicographic 排序转换"""
+
+def evenodd(data: NDArray, axes: List[int], dtype=None) -> NDArray:
+    """Lexicographic → Even-odd 排序转换"""
+\end{lstlisting}
+
+% ============================================================================
+\section{Gamma 矩阵代数}
+% ============================================================================
+
+\begin{lstlisting}[style=pycode]
+from pyquda import gamma
+
+class Gamma(index: int, factor: int = 1):
+    """单 gamma 矩阵 (0-15 索引)"""
+    # 运算符: @, +, -, *, /, T, H, D (Dirac 共轭)
+
+class Projector(factors: list):
+    """16 个 gamma 矩阵的线性组合 (16 元素列表)"""
+    # 支持相同的运算符
+
+# 预定义常量
+gamma.gamma_0, gamma.gamma_1, ..., gamma.gamma_4
+
+# Gamma 基表示
+class DeGrandRossiMatrix: ...   # DeGrand-Rossi (手征) 基
+class DiracPauliMatrix: ...     # Dirac-Pauli 基
+class DeGrandRossiSparse: ...   # 稀疏表示
+class DiracPauliSparse: ...     # 稀疏表示
+\end{lstlisting}
+
+% ============================================================================
+\section{Dirac 算子}
+% ============================================================================
+
+\subsection{类层次结构}
+
+\begin{center}
+\begin{tcolorbox}[width=0.85\textwidth,boxrule=0.5pt,colback=gray!5,colframe=gray!50]
+\begin{verbatim}
+Dirac (ABC)
+├── GaugeDirac          —— 纯规范操作
+└── FermionDirac (ABC)  —— 费米子 Dirac 算子
+    ├── WilsonDirac
+    ├── CloverWilsonDirac
+    └── StaggeredFermionDirac (ABC)
+        ├── StaggeredDirac
+        └── HISQDirac
+\end{verbatim}
+\end{tcolorbox}
+\end{center}
+
+\subsection{GaugeDirac}
+
+\begin{lstlisting}[style=pycode]
+class GaugeDirac(latt_info):
+    """纯规范操作算子"""
+    def loadGauge(gauge)       # 加载规范场
+    def freeGauge()            # 释放规范场
+    def covDev(x, mu)          # 协变导数
+    def laplace(x, laplace3D)  # 拉普拉斯算子
+    def wuppertalSmear(x, steps, alpha)  # Wuppertal smearing
+
+    # Smearing
+    def apeSmear(n_steps, alpha, ...)
+    def stoutSmear(n_steps, rho, ...)
+    def hypSmear(n_steps, alpha0, alpha1, alpha2, ...)
+
+    # 梯度流
+    def wilsonFlow(flow_time, n_steps, ...)
+    def symanzikFlow(flow_time, n_steps, ...)
+
+    # 可观测量
+    def plaquette() / polyakovLoop() / energy()
+    def qcharge() / qchargeDensity()
+
+    # 规范固定
+    def fixingOVR(n_steps, tol, ...)
+    def fixingFFT(n_steps, tol, ...)
+
+    # 随机数
+    def gaussGauge(seed) / gaussMom(seed)
+\end{lstlisting}
+
+\subsection{FermionDirac}
+
+\begin{lstlisting}[style=pycode]
+class FermionDirac(latt_info, mass, tol, maxiter, multigrid=None):
+    """费米子 Dirac 算子基类"""
+
+    # 基本操作
+    def invert(b) -> x                          # 求解 D * x = b
+    def mat(x) -> b                             # 计算 D * x
+    def matDagMat(x) -> b                       # 计算 D^\dagger D * x
+    def dslash(x, parity) -> b                  # 单 parity Dslash
+
+    # 多右端量版本
+    def invertMultiSrc(b) / matMultiSrc(x) / matDagMatMultiSrc(x)
+    def dslashMultiSrc(x, parity)
+
+    # 预条件版本
+    def invertPC(b)                             # 预条件反演
+    def invertCloverPC(b)                       # Clover 预条件反演
+
+    # 配置
+    def useGauge(gauge)                         # 上下文管理器加规范场
+    def setPrecision(precision)                 # 设置精度
+    def setReconstruct(reconstruct)             # 设置重构方案
+    def setVerbosity(verbosity)                 # 设置详细度
+\end{lstlisting}
+
+\subsection{具体 Dirac 算子}
+
+\begin{lstlisting}[style=pycode]
+class WilsonDirac(latt_info, mass, tol, maxiter, multigrid=None):
+    """Wilson 费米子 Dirac 算子"""
+
+class CloverWilsonDirac(latt_info, mass, tol, maxiter,
+                         clover_csw=0.0, clover_xi=1.0, multigrid=None):
+    """Clover 改进 Wilson 费米子 Dirac 算子"""
+
+class StaggeredDirac(latt_info, mass, tol, maxiter,
+                      tadpole_coeff=1.0, multigrid=None):
+    """Staggered 费米子 Dirac 算子"""
+
+class HISQDirac(latt_info, mass, tol, maxiter,
+                 naik_epsilon=0.0, multigrid=None):
+    """HISQ 费米子 Dirac 算子"""
+\end{lstlisting}
+
+\subsection{多网格预条件子}
+
+\begin{lstlisting}[style=pycode]
+class Multigrid(param, inv_param, instance):
+    """多网格预条件子生命周期管理"""
+    def setParam(coarse_tol, coarse_maxiter,
+                 setup_tol, setup_maxiter,
+                 smoother_nu_pre, smoother_nu_post, smoother_omega)
+    def new()                                  # 初始化
+    def update(thin_update_only)               # 更新
+    def destroy()                              # 销毁
+\end{lstlisting}
+
+% ============================================================================
+\section{HMC（混合蒙特卡洛）}
+% ============================================================================
+
+\subsection{作用量类}
+
+\begin{lstlisting}[style=pycode]
+from pyquda.action import (
+    GaugeAction, CloverWilsonAction, HISQAction,
+    MultiHISQAction, LoopParam, RationalParam
+)
+
+# 规范作用量
+gauge_action = GaugeAction(latt_info, loop_param, beta)
+
+# Clover 费米子作用量（1 或 2 味）
+clover_action = CloverWilsonAction(latt_info, rational_param,
+    mass, n_flavor, tol, maxiter, clover_csw)
+
+# HISQ 费米子作用量
+hisq_action = HISQAction(latt_info, rational_param,
+    tol, maxiter, naik_epsilon)
+
+# 多味 HISQ（共享 fat/long 链接）
+multi_hisq = MultiHISQAction(latt_info, [hisq1, hisq2, ...])
+\end{lstlisting}
+
+\textbf{LoopParam} 和 \textbf{RationalParam}：
+\begin{lstlisting}[style=pycode]
+LoopParam(path: List[List[int]], coeff: List[float])
+    """规范圈参数 (如 plaquette [1,0,0,0], rectangle [2,0,0,0])"""
+
+RationalParam(norm_force, residue_force, offset_force,
+              norm_sample, residue_sample, offset_sample,
+              norm_action, residue_action, offset_action)
+    """有理近似参数（用于 RHMC）"""
+\end{lstlisting}
+
+\subsection{积分器类}
+
+\begin{lstlisting}[style=pycode]
+class Integrator(n_steps):
+    """积分器基类"""
+
+class INT_3G1F(n_steps):
+    """3 阶规范 + 1 阶费米子"""
+
+class O2Nf1Ng0V(n_steps):    # 2 阶, 1 道费米子力 (速度版本)
+class O2Nf1Ng0P(n_steps):    # 2 阶, 1 道费米子力 (位置版本)
+class O2Nf2Ng0V(n_steps):    # 2 阶, 2 道费米子力
+class O2Nf2Ng0P(n_steps):    # 2 阶, 2 道费米子力
+class O4Nf5Ng0V(n_steps):    # 4 阶, 5 道费米子力
+class O4Nf5Ng0P(n_steps):    # 4 阶, 5 道费米子力
+\end{lstlisting}
+
+\subsection{HMC 类}
+
+\begin{lstlisting}[style=pycode]
+class HMC(latt_info, monomials, integrator, hmc_inner=None):
+    """混合蒙特卡洛"""
+
+    def initialize(seed, gauge, mom=None):
+        """初始化轨迹"""
+
+    # 动力学
+    def gaussMom()                    # 生成高斯随机动量
+    def integrate(t, project_tol)     # 执行轨迹积分
+    def accept(delta_s) -> bool       # Metropolis 接受/拒绝
+
+    # 作用量
+    def momAction()        # 动量作用量
+    def gaugeAction()      # 规范作用量
+    def fermionAction(use_force_param)  # 费米子作用量
+
+    # I/O
+    def loadGauge() / saveGauge(path)
+    def loadMom() / saveMom(path)
+
+    # 可观测量
+    def plaquette() / polyakovLoop() / energy()
+
+    # 伪费米子
+    def samplePhi()        # 生成伪费米子
+
+    # HDF5
+    def loadH5(path) / saveH5(path)
+\end{lstlisting}
+
+% ============================================================================
+\section{工具函数（pyquda\_utils）}
+% ============================================================================
+
+\subsection{核心工具（core.py）}
+
+\begin{lstlisting}[style=pycode]
+# 传播子反演
+def invert(dirac, source_type, t_srce, source_phase, mrhs, restart) -> LatticePropagator
+def invertEigenvector(dirac, t_srce, source_propag, mrhs, restart)
+def invertSequential(dirac, source_propag, t_srce, mrhs, restart)
+def invertPropagator(dirac, source_propag, mrhs, restart)
+
+# Staggered 版本
+def invertStaggered(dirac, source_type, t_srce, source_phase, mrhs, restart)
+def invertStaggeredSequential(...)
+def invertStaggeredPropagator(...)
+
+# MPI 数据收集/分发
+def gatherLattice(data, axes, reduce_op, root)
+def gatherLattice2(data, tzyx, reduce_op, root)
+def scatterLattice(data_all, tzyx, root)
+def gatherScatterLattice(data, tzyx, reduce_op, root)
+
+# Dirac 算子工厂
+def getDirac(latt_info, mass, tol, maxiter, xi_0, clover_coeff_t,
+             clover_coeff_r, multigrid) -> FermionDirac
+def getClover(...) -> CloverWilsonDirac
+def getWilson(...) -> WilsonDirac
+def getStaggered(...) -> StaggeredDirac
+def getHISQ(...) -> HISQDirac
+\end{lstlisting}
+
+\subsection{源构造（source.py）}
+
+\begin{lstlisting}[style=pycode]
+def point(latt_info, t_srce, spin, color, phase) -> point 源
+def wall(latt_info, t_srce, spin, color, phase) -> wall 源
+def volume(latt_info, spin, color, phase) -> volume 源
+def momentum(latt_info, t_srce, spin, color, phase) -> 动量源
+def colorvector(latt_info, t_srce, spin, phase) -> 颜色向量源
+def source(latt_info, source_type, t_srce, spin, color, source_phase) -> 调度器
+
+# 便捷函数（自动生成全自旋/全颜色组合）
+def source12(...)  # 12 个 spin-color 源 → LatticePropagator
+def source3(...)   # 3 个 color 源 → LatticeStaggeredPropagator
+
+# Gaussian smearing
+def gaussianSmear(x, gauge, rho, n_steps)
+def gaussian(x, gauge, rho, n_steps) / gaussian12(...) / gaussian3(...)
+
+# Sequential 传播子
+def sequential(x, t_srce) / sequential12(...) / sequential3(...)
+\end{lstlisting}
+
+\subsection{相位因子（phase.py / phase\_v2.py）}
+
+\begin{lstlisting}[style=pycode]
+# 动量列表生成
+def getMomList(mom2_max, mom2_min=0) -> list[tuple]
+def getMomDict(mom2_max, mom2_min=0) -> dict[int, str]
+
+# 相位计算
+class MomentumPhase(latt_info):
+    """GPU 上的动量相位因子"""
+
+# v2 API
+class LocationPhase(latt_info):  # 格点坐标相位
+class DistancePhase(latt_info):  # 距离相位
+class MomentumPhase(latt_info):
+    def getPhase(mom, x0)           # 单动量相位
+    def getPhases(mom_mode_list, x0) # 多动量批量
+\end{lstlisting}
+
+\subsection{Gamma 工具（gamma.py）}
+
+\begin{lstlisting}[style=pycode]
+def gamma_mul_fermion(gamma, fermion)           # γ × fermion
+def propagator_mul_gamma(propagator, gamma)     # propagator × γ
+def gamma_mul_propagator(gamma, propagator)     # γ × propagator
+def gamma_mul_propagator_mul_gamma(g1, prop, g2) # γ₁ × propagator × γ₂
+
+# Monkey-patch 的运算符支持
+LatticeFermion @ Gamma       # gamma_mul_fermion
+LatticePropagator @ Gamma    # propagator_mul_gamma
+Gamma @ LatticePropagator    # gamma_mul_propagator
+\end{lstlisting}
+
+\subsection{其他工具}
+
+\begin{lstlisting}[style=pycode]
+# 校验和
+def checksumSciDAC(field) -> (sum29, sum31)
+
+# 场类型转换
+def linkToFermion(link) / fermionToLink(fermion)
+def multiFermionToPropagator(multi_fermion)
+def propagatorToMultiFermion(propagator)
+
+# Wilson 圈
+def wilson_loop(gauge, path) -> LatticeLink
+
+# 3D Laplace 本征求解
+def laplace3d(gauge, n_ev, n_kr, tol, max_restarts, poly_deg, poly_cut) -> (evals, evecs)
+
+# FFT（MPI 分布式）
+def transform(latt_info, field_shape, recvdim, senddim, buf)
+
+# HMC 参数
+def wilsonGaugeLoopParam() -> LoopParam
+def symanzikTreeGaugeLoopParam(u_0) -> LoopParam
+def symanzikOneLoopGaugeLoopParam(u_0, fermion_type, n_flavor) -> LoopParam
+def fermionRationalParam(n_flavor, ...) -> RationalParam
+def staggeredFermionRationalParam(masses, n_flavors, ...) -> RationalParam
+
+# 多网格验证
+def real_geo_block_size(sublatt_size, geo_block_size)
+\end{lstlisting}
+
+% ============================================================================
+\section{文件 I/O}
+% ============================================================================
+
+PyQUDA 支持 9 种格点数据格式，分为低级 API（\texttt{pyquda\_io}）和高级 API（\texttt{pyquda\_utils.io}）。
+
+\subsection{低级 I/O API}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{格式} & \textbf{模块} & \textbf{规范场} & \textbf{传播子} \\
+\midrule
+Chroma QIO (LIME) & \texttt{chroma.py} & 读 & 读（Wilson + Staggered）\\
+MILC              & \texttt{milc.py}   & 读/写 & 读（Wilson + Staggered）\\
+ILDG (LIME)       & \texttt{ildg.py}   & 读 & — \\
+KYU               & \texttt{kyu.py}    & 读/写 & 读/写 \\
+XQCD              & \texttt{xqcd.py}   & — & 读/写 \\
+NERSC             & \texttt{nersc.py}  & 读/写 & — \\
+OpenQCD           & \texttt{openqcd.py}& 读/写 & — \\
+NPY (NumPy)       & \texttt{npy.py}    & 读/写 & 读/写 \\
+\bottomrule
+\end{tabular}
+\caption{低级 I/O 格式支持}
+\end{table}
+
+\subsection{高级 I/O API（返回 Field 对象）}
+
+\begin{lstlisting}[style=pycode]
+from pyquda_utils.io import (
+    # Chroma QIO
+    readChromaQIOGauge, readChromaQIOPropagator, readChromaQIOStaggeredPropagator,
+
+    # ILDG
+    readILDGGauge, readILDGBinGauge,
+
+    # MILC
+    readMILCGauge, writeMILCGauge,
+    readMILCQIOPropagator, readMILCQIOStaggeredPropagator,
+
+    # KYU
+    readKYUGauge, writeKYUGauge,
+    readKYUPropagator, writeKYUPropagator,
+
+    # XQCD
+    readXQCDPropagator, writeXQCDPropagator,
+    readXQCDStaggeredPropagator, writeXQCDStaggeredPropagator,
+
+    # NPY
+    readNPYGauge, writeNPYGauge,
+    readNPYPropagator, writeNPYPropagator,
+
+    # NERSC
+    readNERSCGauge, writeNERSCGauge,
+
+    # OpenQCD
+    readOpenQCDGauge, writeOpenQCDGauge,
+
+    # Gamma 基转换
+    rotateToDiracPauli, rotateToDeGrandRossi,
+)
+\end{lstlisting}
+
+\textbf{使用示例}：
+\begin{lstlisting}[style=pycode]
+from pyquda_utils.io import readChromaQIOGauge
+
+# 读取 Chroma 格式规范场
+gauge = readChromaQIOGauge(latt_info, "config.lime", "config.ini.xml")
+
+# 读取 MILC 格式规范场
+gauge = readMILCGauge(latt_info, "config.milc")
+\end{lstlisting}
+
+% ============================================================================
+\section{插件系统}
+% ============================================================================
+
+PyQUDA 的插件系统使用 \texttt{pycparser} 自动从 C 头文件生成 Cython 封装。
+
+\subsection{使用插件构建工具}
+
+\begin{lstlisting}[style=bashcode]
+# 自动生成封装
+pyquda_plugins -l <库名> -i <头文件.h> -L <库路径> -I <包含路径>
+\end{lstlisting}
+
+\subsection{内置插件}
+
+\subsubsection{pycontract —— 强子收缩}
+
+\begin{lstlisting}[style=pycode]
+from pyquda_plugins.pycontract import (
+    # 介子
+    mesonTwoPoint, mesonAllSinkTwoPoint, mesonAllSourceTwoPoint,
+
+    # 重子
+    baryonDiquark, baryonTwoPoint, baryonGeneralTwoPoint,
+    baryonSequentialTwoPoint, baryonTwoPoint_v2,
+)
+\end{lstlisting}
+
+\subsubsection{pygwu —— GWU 重叠费米子}
+
+\begin{lstlisting}[style=pycode]
+from pyquda_plugins.pygwu import Overlap
+
+ov = Overlap(latt_info)
+ov.buildHWilson(gauge, kappa)       # 构造 H_Wilson
+ov.buildHWilsonEigen(eignum, ...)    # 计算本征向量
+ov.buildOverlap(prec, use_fp32)     # 构造重叠算子
+ov.invert(b, masses, tol, maxiter, ...)  # 多质量重叠反演
+\end{lstlisting}
+
+% ============================================================================
+\section{示例演示}
+% ============================================================================
+
+\subsection{示例 1：淬火 HMC}
+
+\begin{lstlisting}[style=pycode]
+# 1_Quenched_HMC.py
+from pyquda import init, LatticeInfo, LatticeGauge, LatticeMom
+from pyquda.action import GaugeAction, LoopParam
+from pyquda.hmc import HMC, O2Nf1Ng0V
+
+# 初始化
+latt_info = LatticeInfo([16, 16, 16, 32])
+init([1, 1, 1, 1], [16, 16, 16, 32], backend="cupy")
+
+# 定义作用量 (Wilson 规范作用量)
+loop_param = LoopParam(path=[[1, 0, 0, 0]], coeff=[4.0 / 3])
+gauge_action = GaugeAction(latt_info, loop_param, beta=5.8)
+
+# 定义积分器和 HMC
+integrator = O2Nf1Ng0V(n_steps=10)
+hmc = HMC(latt_info, [gauge_action], integrator)
+
+# 初始化并运行轨迹
+gauge = LatticeGauge(latt_info)
+gauge.gauss(seed=42)
+hmc.initialize(seed=42, gauge=gauge)
+
+for traj in range(100):
+    hmc.gaussMom()
+    delta_s = hmc.integrate(1.0, 1e-7)
+    if hmc.accept(delta_s):
+        print(f"Traj {traj}: accepted, dS={delta_s:.4f}")
+        hmc.saveGauge(f"config_{traj}.npy")
+\end{lstlisting}
+
+\subsection{示例 2：夸克传播子}
+
+\begin{lstlisting}[style=pycode]
+# 2_Quark_Propagator.py
+from pyquda import LatticeInfo, LatticeGauge, LatticeFermion
+from pyquda.dirac import CloverWilsonDirac
+from pyquda_utils.io import readChromaQIOGauge
+from pyquda_utils.core import invert
+from pyquda_utils.source import wall
+
+# 初始化格点
+latt_info = LatticeInfo([24, 24, 24, 72])
+init([1, 1, 1, 1], [24, 24, 24, 72])
+
+# 读取规范场并 smearing
+gauge = readChromaQIOGauge(latt_info, "config.lime", "config.ini.xml")
+gauge.stoutSmear(n_steps=1, rho=0.125)
+
+# 创建 Dirac 算子并反演
+dirac = CloverWilsonDirac(latt_info, mass=-0.2395, tol=1e-12, maxiter=10000)
+dirac.setPrecision("invert")
+
+with dirac.useGauge(gauge):
+    prop = invert(dirac, wall, t_srce=0, source_phase=[0, 0, 0, 0], mrhs=12, restart=0)
+\end{lstlisting}
+
+\subsection{示例 3：Pion 和质子两点函数}
+
+\begin{lstlisting}[style=pycode]
+# 3_Pion_Proton_2pt.py
+from pyquda_utils.source import source12
+from pyquda_plugins.pycontract import mesonTwoPoint, baryonTwoPoint
+
+# 12 个 spin-color 源 → 传播子
+prop = source12(latt_info, "wall", t_srce=0, source_phase=[0, 0, 0, 0])
+
+with dirac.useGauge(gauge):
+    prop = invert(dirac, prop, restart=0)
+
+# Pion 2pt: gamma5 投影
+pion_2pt = mesonTwoPoint(prop, prop, gamma_ab=gamma_4,
+                          gamma_dc=gamma_4)  # γ₄ × propagator × γ₄
+
+# 质子 2pt: Cγ₅ 投影
+proton_2pt = baryonTwoPoint(prop, prop, prop,
+    contract_type="Cg5", gamma_mn=gamma_5)
+\end{lstlisting}
+
+\subsection{示例 4：Pion PCAC 关系}
+
+\begin{lstlisting}[style=pycode]
+# 4_Pion_PCAC.py
+# 计算轴矢 Ward 恒等式
+# ⟨∂_μ A_μ(x) O(0)⟩ = 2 m_q ⟨P(x) O(0)⟩
+
+# A₄ 插入：γ₅γ₄
+pion_a4 = mesonTwoPoint(prop_axial, prop, gamma_ab=gamma_4 * gamma_5,
+                         gamma_dc=gamma_4 * gamma_5)
+
+# 赝标量插入：γ₅
+pion_p = mesonTwoPoint(prop, prop, gamma_ab=gamma_4 * gamma_5,
+                        gamma_dc=gamma_4 * gamma_5)
+
+# PCAC 质量: m_q = ⟨∂A₄⟩ / (2⟨P⟩)
+\end{lstlisting}
+
+\subsection{示例 5：Pion 色散关系}
+
+\begin{lstlisting}[style=pycode]
+# 5_Pion_Dispersion.py
+from pyquda_utils.phase import MomentumPhase
+
+phase = MomentumPhase(latt_info)
+
+for mom_str in ["PX0PY0PZ0", "PX1PY0PZ0", "PX1PY1PZ0", "PX1PY1PZ1"]:
+    mom_phase = phase.getPhase(mom_str, x0=0)
+    # 动量投影的有效质量
+    # meff(t) = arccosh((C(t+1) + C(t-1)) / (2 * C(t)))
+\end{lstlisting}
+
+% ============================================================================
+\section{接口清单（API Reference）}
+% ============================================================================
+
+\subsection{pyquda 核心包}
+
+\begin{lstlisting}[style=pycode]
+# __init__.py —— 初始化
+init(grid_size, latt_size, grid_map, backend, backend_target, init_quda, ...)
+initQUDA(grid_size, device, use_malloc_quda)
+isQUDAInitialized() -> bool
+
+# field.py —— 格点场类型
+LatticeInfo(global_size, t_boundary, anisotropy)
+LatticeInt, MultiLatticeInt
+LatticeReal, MultiLatticeReal
+LatticeComplex, MultiLatticeComplex
+LatticeLink, LatticeGauge, LatticeMom, LatticeRotation, LatticeClover
+LatticeFermion, HalfLatticeFermion, MultiLatticeFermion, MultiHalfLatticeFermion
+LatticePropagator
+LatticeStaggeredFermion, HalfLatticeStaggeredFermion
+MultiLatticeStaggeredFermion, MultiHalfLatticeStaggeredFermion
+LatticeStaggeredPropagator
+lexico(data, axes, dtype), evenodd(data, axes, dtype)
+
+# gamma.py —— Gamma 代数
+Gamma(index, factor)
+Projector(factors)
+DeGrandRossiMatrix, DiracPauliMatrix
+DeGrandRossiSparse, DiracPauliSparse
+
+# hmc.py —— HMC
+Integrator(n_steps)
+INT_3G1F, O2Nf1Ng0V, O2Nf1Ng0P, O2Nf2Ng0V, O2Nf2Ng0P
+O4Nf5Ng0V, O4Nf5Ng0P
+HMC(latt_info, monomials, integrator, hmc_inner)
+\end{lstlisting}
+
+\subsection{pyquda.action}
+
+\begin{lstlisting}[style=pycode]
+LoopParam(path, coeff)
+RationalParam(norm_force, residue_force, offset_force, ...)
+Action(latt_info, dirac)
+GaugeAction(latt_info, loop_param, beta)
+FermionAction(latt_info, dirac, rational_param, mass, n_flavor, tol, maxiter)
+CloverWilsonAction(latt_info, rational_param, mass, n_flavor, tol, maxiter, clover_csw)
+HISQAction(latt_info, rational_param, tol, maxiter, naik_epsilon)
+MultiHISQAction(latt_info, hisq_actions)
+\end{lstlisting}
+
+\subsection{pyquda.dirac}
+
+\begin{lstlisting}[style=pycode]
+Dirac(latt_info)
+GaugeDirac(latt_info)
+    loadGauge, freeGauge, covDev, laplace, wuppertalSmear
+    apeSmear, stoutSmear, hypSmear
+    wilsonFlow, symanzikFlow, wilsonFlowScale
+    plaquette, polyakovLoop, energy, qcharge, qchargeDensity
+    fixingOVR, fixingFFT, projectSU3, staggeredPhase
+    gaussGauge, gaussMom
+
+FermionDirac(latt_info, mass, tol, maxiter, multigrid)
+    invert, invertRestart, mat, matDagMat, dslash
+    invertMultiSrc, invertMultiSrcRestart
+    matMultiSrc, matDagMatMultiSrc, dslashMultiSrc
+    invertPC, invertCloverPC, useGauge
+    setPrecision, setReconstruct, setVerbosity
+
+WilsonDirac(latt_info, mass, tol, maxiter, multigrid)
+CloverWilsonDirac(latt_info, mass, tol, maxiter, clover_csw, clover_xi, multigrid)
+StaggeredDirac(latt_info, mass, tol, maxiter, tadpole_coeff, multigrid)
+HISQDirac(latt_info, mass, tol, maxiter, naik_epsilon, multigrid)
+
+Multigrid(param, inv_param, instance)
+    setParam, new, update, destroy
+Deflation(param, inv_param, instance)
+    new, update, destroy
+\end{lstlisting}
+
+\subsection{pyquda\_utils.core}
+
+\begin{lstlisting}[style=pycode]
+init(...)
+invert(dirac, source_type, t_srce, source_phase, mrhs, restart)
+invertEigenvector(dirac, t_srce, source_propag, mrhs, restart)
+invertSequential(dirac, source_propag, t_srce, mrhs, restart)
+invertPropagator(dirac, source_propag, mrhs, restart)
+invertStaggered(dirac, source_type, t_srce, source_phase, mrhs, restart)
+invertStaggeredSequential(...)
+invertStaggeredPropagator(...)
+gatherLattice(data, axes, reduce_op, root)
+gatherLattice2(data, tzyx, reduce_op, root)
+scatterLattice(data_all, tzyx, root)
+gatherScatterLattice(data, tzyx, reduce_op, root)
+getDirac(latt_info, mass, tol, maxiter, xi_0, clover_coeff_t, clover_coeff_r, multigrid)
+getClover(...)
+getWilson(...)
+getStaggered(...)
+getHISQ(...)
+\end{lstlisting}
+
+\subsection{pyquda\_utils.source}
+
+\begin{lstlisting}[style=pycode]
+point(latt_info, t_srce, spin, color, phase)
+wall(latt_info, t_srce, spin, color, phase)
+volume(latt_info, spin, color, phase)
+momentum(latt_info, t_srce, spin, color, phase)
+colorvector(latt_info, t_srce, spin, phase)
+source(latt_info, source_type, t_srce, spin, color, source_phase)
+source12(latt_info, source_type, t_srce, source_phase)
+source3(latt_info, source_type, t_srce, source_phase)
+gaussianSmear(x, gauge, rho, n_steps)
+gaussian(x, gauge, rho, n_steps)
+gaussian12(x12, gauge, rho, n_steps)
+gaussian3(x3, gauge, rho, n_steps)
+sequential(x, t_srce)
+sequential12(x12, t_srce)
+sequential3(x3, t_srce)
+\end{lstlisting}
+
+\subsection{pyquda\_utils.phase / phase\_v2}
+
+\begin{lstlisting}[style=pycode]
+# phase.py
+getMomList(mom2_max, mom2_min=0)
+getMomDict(mom2_max, mom2_min=0)
+MomentumPhase(latt_info)
+
+# phase_v2.py
+LocationPhase(latt_info)
+DistancePhase(latt_info)
+MomentumPhase(latt_info): getPhase(mom, x0), getPhases(mom_list, x0)
+\end{lstlisting}
+
+\subsection{pyquda\_utils 其他工具}
+
+\begin{lstlisting}[style=pycode]
+# gamma.py
+gamma_mul_fermion(gamma, fermion)
+propagator_mul_gamma(propagator, gamma)
+gamma_mul_propagator(gamma, propagator)
+gamma_mul_propagator_mul_gamma(g1, prop, g2)
+
+# checksum.py
+checksumSciDAC(field) -> (sum29, sum31)
+
+# convert.py
+linkToFermion(link), fermionToLink(fermion)
+multiFermionToPropagator(multi_fermion)
+propagatorToMultiFermion(propagator)
+multiField(fields)
+
+# wilson_loop.py
+wilson_loop(gauge, path) -> LatticeLink
+
+# eigensolve.py
+laplace3d(gauge, n_ev, n_kr, tol, max_restarts, poly_deg, poly_cut)
+
+# fft.py
+transform(latt_info, field_shape, recvdim, senddim, buf)
+loadBalanceSubsize(GL, size, rank), loadBalanceStart(GL, size, rank)
+
+# hmc_param.py
+wilsonGaugeLoopParam(), symanzikTreeGaugeLoopParam(u_0)
+symanzikOneLoopGaugeLoopParam(u_0, fermion_type, n_flavor)
+fermionRationalParam(n_flavor, ...)
+staggeredFermionRationalParam(masses, n_flavors, ...)
+
+# geo_block_size.py
+real_geo_block_size(sublatt_size, geo_block_size)
+
+# deprecated.py
+cb2(), smear(), smear4(), invert12(), getDslash(), getStaggeredDslash()
+\end{lstlisting}
+
+\subsection{pyquda\_io —— 低级 I/O}
+
+\begin{lstlisting}[style=pycode]
+# io_general.py
+IOGeneral, readIOGeneral, writeIOGeneral
+
+# chroma.py
+readQIOGauge, readQIOPropagator, readQIOStaggeredPropagator
+
+# milc.py
+readGauge, writeGauge, readQIOPropagator, readQIOStaggeredPropagator
+
+# ildg.py
+readGauge, readBinGauge
+
+# kyu.py
+readGauge, writeGauge, readPropagator, writePropagator
+
+# xqcd.py
+readPropagator, writePropagator, readStaggeredPropagator, writeStaggeredPropagator
+readPropagatorFast, writePropagatorFast
+
+# nersc.py
+readGauge, writeGauge
+
+# openqcd.py
+readGauge, writeGauge
+
+# npy.py
+readGauge, writeGauge, readPropagator, writePropagator
+\end{lstlisting}
+
+\subsection{pyquda\_plugins}
+
+\begin{lstlisting}[style=pycode]
+# pycontract
+init(), mesonTwoPoint, mesonAllSinkTwoPoint, mesonAllSourceTwoPoint
+baryonDiquark, baryonTwoPoint, baryonGeneralTwoPoint
+baryonSequentialTwoPoint, baryonTwoPoint_v2
+
+# pygwu
+Overlap(latt_info):
+    buildHWilson, loadHWilsonEigen, buildHWilsonEigen
+    buildOverlap, loadOverlapEigen
+    invert(b, masses, tol, maxiter, ...)
+readEigenSystem, readEigenSystemInChunks
+multiFermionFromDiracPauli, multiFermionToDiracPauli, ...
+\end{lstlisting}
+
+% ============================================================================
+\section{完整示例：端到端介子谱计算}
+% ============================================================================
+
+以下示例整合了 PyQUDA 的核心流程，从读取规范场到提取有效质量：
+
+\begin{lstlisting}[style=pycode]
+from pyquda import init, LatticeInfo, LatticeGauge
+from pyquda.dirac import CloverWilsonDirac
+from pyquda_utils.core import invert
+from pyquda_utils.source import source12
+from pyquda_utils.io import readChromaQIOGauge
+from pyquda_plugins.pycontract import mesonTwoPoint
+from pyquda_utils.phase import MomentumPhase
+import numpy as np
+
+# 1. 初始化
+latt_info = LatticeInfo([24, 24, 24, 72])
+init([1, 1, 1, 1], [24, 24, 24, 72], backend="cupy")
+
+# 2. 读取并处理规范场
+gauge = readChromaQIOGauge(latt_info, "config.lime", "config.ini.xml")
+gauge.stoutSmear(n_steps=1, rho=0.125)
+
+# 3. 创建 Dirac 算子
+dirac = CloverWilsonDirac(latt_info, mass=-0.2395, tol=1e-12,
+                           maxiter=10000, clover_csw=1.0)
+dirac.setPrecision("invert")
+
+# 4. 计算传播子
+prop = source12(latt_info, "wall", t_srce=0,
+                 source_phase=[0, 0, 0, 0])
+
+with dirac.useGauge(gauge):
+    prop = invert(dirac, prop, restart=0)
+
+# 5. 计算 pion 两点函数
+from pyquda import gamma
+pion_2pt = mesonTwoPoint(prop, prop,
+    gamma_ab=gamma.gamma_4 * gamma.gamma_5,
+    gamma_dc=gamma.gamma_4 * gamma.gamma_5)
+
+# 6. 提取有效质量
+data = pion_2pt.data  # numpy/cupy 数组
+meff = np.arccosh((data[:-2] + data[2:]) / (2 * data[1:-1]))
+print("Effective mass:", meff)
+\end{lstlisting}
+
+% ============================================================================
+\section{依赖关系}
+% ============================================================================
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{依赖} & \textbf{版本} & \textbf{用途} \\
+\midrule
+QUDA          & develop 分支  & GPU 加速格点 QCD 核心库 \\
+Python        & $\ge$ 3.8     & 运行环境 \\
+mpi4py        & —             & MPI 分布式计算 \\
+numpy         & —             & 数值计算（全后端兼容层）\\
+Cython        & —             & C/CUDA 绑定生成 \\
+\multicolumn{3}{@{}l}{\textbf{可选 GPU 后端（至少一个）}} \\
+CuPy          & —             & CUDA/ROCm GPU 数组 \\
+PyTorch       & —             & CUDA 张量计算 \\
+DPNP          & —             & Intel GPU 数组 \\
+\multicolumn{3}{@{}l}{\textbf{可选工具}} \\
+h5py          & —             & HDF5 I/O \\
+opt\_einsum   & —             & 张量收缩优化 \\
+gmpy2         & —             & 有理近似 (Remez 算法) \\
+matplotlib    & —             & 绑图（示例）\\
+GPT           & —             & Grid Python Toolkit 互操作 \\
+\bottomrule
+\end{tabular}
+\caption{完整依赖列表}
+\end{table}
+
+% ============================================================================
+\section{维护与贡献}
+% ============================================================================
+
+\subsection{手动更新注意事项}
+
+以下文件需要手动更新（无法自动生成）：
+\begin{itemize}[itemsep=2pt]
+    \item \texttt{quda.in.pxd} 和 \texttt{quda.in.pyx} 中的函数定义
+    \item \texttt{pyquda.pyi} 和 \texttt{enum\_quda.in.py} 中的 docstring
+\end{itemize}
+
+这意味着只要 QUDA API 保持不变，PyQUDA 就能与未来版本兼容。
+
+\subsection{开发环境建议}
+
+\begin{itemize}[itemsep=2pt]
+    \item 使用就地构建模式（\texttt{setup.py build\_ext --inplace}）而非安装模式
+    \item 修改 Python 文件后立即生效，无需重新编译
+    \item 在集群上运行时需要将项目根目录添加到 \texttt{sys.path}
+\end{itemize}
+
+\end{document}

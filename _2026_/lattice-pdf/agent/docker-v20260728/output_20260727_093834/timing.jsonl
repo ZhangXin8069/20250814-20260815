@@ -1,0 +1,7 @@
+{"step": "00_environment_check", "elapsed_s": 0.23, "mem_before_mb": 26.4, "mem_after_mb": 58.8, "mem_delta_mb": 32.3, "mem_peak_gb": 0.06, "timestamp": "2026-07-27T09:38:34.482580"}
+{"step": "load_eigvecs", "elapsed_s": 6.806, "mem_before_mb": 58.8, "mem_after_mb": 6893.3, "mem_delta_mb": 6834.6, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T09:38:41.299049"}
+{"step": "load_eigvals", "elapsed_s": 0.002, "mem_before_mb": 6893.3, "mem_after_mb": 6893.3, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T09:38:41.309258"}
+{"step": "VVV_Pz-2_conf6250", "elapsed_s": 912.574, "mem_before_mb": 6893.3, "mem_after_mb": 6893.3, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T09:53:53.926634", "conf_id": 6250, "Pz": -2, "Nev1": 100}
+{"step": "Wick_Pz-2_conf6250", "elapsed_s": 2465.232, "mem_before_mb": 6893.3, "mem_after_mb": 6980.3, "mem_delta_mb": 87.0, "mem_peak_gb": 6.82, "timestamp": "2026-07-27T10:34:59.518339", "conf_id": 6250, "Pz": -2, "Nev1": 100}
+{"step": "meff_Pz-2_conf6250", "elapsed_s": 0.007, "mem_before_mb": 6980.3, "mem_after_mb": 6980.3, "mem_delta_mb": 0.0, "mem_peak_gb": 6.82, "timestamp": "2026-07-27T10:34:59.534142", "conf_id": 6250, "Pz": -2}
+{"step": "VVV_Pz-2_conf6450", "elapsed_s": 899.66, "mem_before_mb": 6980.3, "mem_after_mb": 7603.2, "mem_delta_mb": 622.9, "mem_peak_gb": 7.43, "timestamp": "2026-07-27T10:49:59.199783", "conf_id": 6450, "Pz": -2, "Nev1": 100}

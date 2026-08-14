@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH --job-name=PlaAll
+#SBATCH --partition=i72c512g,cpueicc,cpu6248R
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --output=logs/step_%A_%a.out
+#SBATCH --error=logs/step_%A_%a.err
+
+
+
+#exe=/public/group/imp/zengch/LQCD/renorma/fit_zr_a2all.py
+exe=/public/group/imp/zengch/LQCD/renorma/fit_zr_new_test.py
+mkdir -p logs
+
+python "$exe"  > "logs/output.log" 2>&1

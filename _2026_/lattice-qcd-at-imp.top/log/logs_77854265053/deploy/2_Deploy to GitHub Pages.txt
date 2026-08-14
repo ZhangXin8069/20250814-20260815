@@ -1,0 +1,24 @@
+﻿2026-07-06T15:58:27.2240273Z ##[group]Run actions/deploy-pages@v5
+2026-07-06T15:58:27.2241216Z with:
+2026-07-06T15:58:27.2244946Z   token: ***
+2026-07-06T15:58:27.2245371Z   timeout: 600000
+2026-07-06T15:58:27.2245794Z   error_count: 10
+2026-07-06T15:58:27.2246250Z   reporting_interval: 5000
+2026-07-06T15:58:27.2246749Z   artifact_name: github-pages
+2026-07-06T15:58:27.2247250Z   preview: false
+2026-07-06T15:58:27.2247885Z ##[endgroup]
+2026-07-06T15:58:27.4207001Z (node:2233) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-07-06T15:58:27.4208807Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-07-06T15:58:27.5124714Z Fetching artifact metadata for "github-pages" in this workflow run
+2026-07-06T15:58:27.6039560Z Found 1 artifact(s)
+2026-07-06T15:58:27.6049717Z Creating Pages deployment with payload:
+2026-07-06T15:58:27.6051040Z {
+2026-07-06T15:58:27.6052135Z 	"artifact_id": 8114484256,
+2026-07-06T15:58:27.6053760Z 	"pages_build_version": "bb18fc8cdeb31f64d0f12edfb2569a911992bc1f",
+2026-07-06T15:58:27.6116197Z 	"oidc_token": "***"
+2026-07-06T15:58:27.6116843Z }
+2026-07-06T15:58:27.8962107Z Created deployment for bb18fc8cdeb31f64d0f12edfb2569a911992bc1f, ID: bb18fc8cdeb31f64d0f12edfb2569a911992bc1f
+2026-07-06T15:58:32.8977813Z Getting Pages deployment status...
+2026-07-06T15:58:33.0552005Z Current status: syncing_files
+2026-07-06T15:58:38.0565455Z Getting Pages deployment status...
+2026-07-06T15:58:38.2373615Z ##[error]Deployment failed, try again later.

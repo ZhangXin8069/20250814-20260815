@@ -1,0 +1,891 @@
+% ============================================================================
+% LQCD Master — 完整技术文档
+% Agentic Scientific Computing for Lattice QCD
+% ============================================================================
+\documentclass[12pt,a4paper]{ctexart}
+
+% ---------- Packages ----------
+\usepackage[hmargin=2.5cm,vmargin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{fancyhdr}
+\usepackage{titling}
+\usepackage{tcolorbox}
+\usepackage{fontspec}
+\setmonofont{DejaVu Sans Mono}[Scale=0.88]
+
+% ---------- Code Listing Style ----------
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{keyword}{RGB}{0,0,180}
+\definecolor{string}{RGB}{0,128,0}
+\definecolor{comment}{RGB}{128,128,128}
+
+\lstdefinestyle{pycode}{
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    basicstyle=\footnotesize\ttfamily,
+    keywordstyle=\color{keyword}\bfseries,
+    stringstyle=\color{string},
+    commentstyle=\color{comment}\itshape,
+    breaklines=true,
+    showstringspaces=false,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt,
+    tabsize=4,
+    language=Python,
+    morekeywords={self,None,True,False,import,from,as,class,def,return,if,else,elif,for,while,break,continue,try,except,finally,with,yield,raise},
+}
+\lstdefinestyle{bashcode}{
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    basicstyle=\footnotesize\ttfamily,
+    breaklines=true,
+    showstringspaces=false,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt,
+    language=bash,
+}
+\lstdefinestyle{yamlcode}{
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    basicstyle=\footnotesize\ttfamily,
+    breaklines=true,
+    showstringspaces=false,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt,
+}
+
+\tcbuselibrary{skins,breakable}
+
+\newtcbox{\inlinefile}[1][]{colback=codebg,colframe=codeframe,boxrule=0.5pt,arc=2pt,left=2pt,right=2pt,top=0pt,bottom=0pt,fontupper=\footnotesize\ttfamily,#1}
+
+% ---------- Metadata ----------
+\title{{\Huge\bfseries LQCD Master}\\[4pt]
+       {\large 完整技术文档}\\[4pt]
+       {\normalsize Agentic Scientific Computing for Lattice QCD}}
+\author{}
+\date{2026年7月20日}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small LQCD Master 技术文档}
+\fancyhead[R]{\small \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\vspace{2cm}
+\begin{center}
+\begin{tcolorbox}[width=0.85\textwidth,boxrule=0.8pt,colback=blue!3!white,colframe=blue!40!black]
+\centering
+\textbf{项目地址：}\url{https://github.com/sjtu-sai-agents/LQCD_Master.git}
+
+\textbf{许可证：}MIT
+
+\textbf{Python 版本要求：}3.10+
+\end{tcolorbox}
+\end{center}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{项目概述}
+% ============================================================================
+
+LQCD Master 是一个\textbf{自主 AI 科学家}系统，专为格点量子色动力学（Lattice QCD）研究设计。它将自然语言描述的物理任务自动翻译为可执行的 PyQUDA 程序及 Slurm 集群提交脚本。
+
+\subsection{核心能力}
+
+\begin{itemize}[itemsep=4pt]
+    \item \textbf{自然语言到 GPU 计算}：用户用自然语言描述物理目标（如"计算 pion 两点关联函数"），系统自动生成完整的 PyQUDA 代码
+    \item \textbf{多阶段流水线}：Planner（物理规划）$\rightarrow$ Executor（代码生成 + 自动调试）$\rightarrow$ Slurm 提交
+    \item \textbf{人在回路}：每个阶段都设有检查点（checkpoint），集群提交前必须经人工确认
+    \item \textbf{自动调试}：静态分析检测到代码错误后，Executor 自动重写修正
+    \item \textbf{技能路由}：领域知识（关联函数理论、PyQUDA API、分析方法等）按任务相关性注入 LLM 提示词
+    \item \textbf{基准验证}：70 个独立验证任务，覆盖 5 类可观测量
+\end{itemize}
+
+\subsection{流水线架构}
+
+\begin{center}
+\begin{tcolorbox}[width=0.9\textwidth,boxrule=0.5pt,colback=gray!5,colframe=gray!50]
+\begin{verbatim}
+Natural-language task
+       │
+       ▼
+┌─────────────────┐
+│     Planner      │  物理计划 (observable, propagators, contractions)
+│  solve/critique/ │  → plan.yaml + summary.md
+│     rewrite      │
+└────────┬─────────┘
+         │ [可选: 人工检查点]
+         ▼
+┌─────────────────┐
+│    Executor      │  代码生成 + 自动调试
+│ generate/critique│  → 代码产物
+│    /rewrite      │
+└────────┬─────────┘
+         │ [可选: 人工检查点]
+         ▼
+┌─────────────────┐
+│  Slurm Submit    │  GPU 计算 → 物理结果
+└─────────────────┘
+\end{verbatim}
+\end{tcolorbox}
+\end{center}
+
+% ============================================================================
+\section{安装指南}
+% ============================================================================
+
+\subsection{环境要求}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{组件} & \textbf{要求} \\
+\midrule
+Python       & $\ge$ 3.10 \\
+GPU 后端     & CuPy（CUDA 12.x 或 ROCm 5.x）\\
+格点 QCD     & PyQUDA + QUDA（从源码安装）\\
+集群调度     & Slurm with GPU partition \\
+LLM API      & OpenAI 兼容端点（如 DeepSeek）\\
+Web 搜索     & Serper.dev API Key \\
+\midrule
+\textbf{Python 依赖} & \\
+openai       & $\ge$ 1.0 \\
+prompt\_toolkit & $\ge$ 3.0 \\
+PyYAML       & $\ge$ 6.0 \\
+numpy        & $\ge$ 1.24 \\
+opt\_einsum  & $\ge$ 3.3 \\
+\bottomrule
+\end{tabular}
+\caption{系统需求}
+\end{table}
+
+\subsection{安装步骤}
+
+\begin{lstlisting}[style=bashcode]
+# 1. 克隆仓库
+git clone https://github.com/sjtu-sai-agents/LQCD_Master.git
+cd LQCD_Master
+
+# 2. 安装 Python 依赖
+pip install -r requirements.txt
+
+# 3. 配置环境变量
+cp .env.template .env
+# 编辑 .env 填入 LLM API Key 和 Serper Key
+
+# 4. 运行任务
+python run.py --task "Calculate the pion two-point correlator" --test --non-interactive
+\end{lstlisting}
+
+\subsection{GPU 后端安装（可选）}
+
+\begin{lstlisting}[style=bashcode]
+# CUDA 12.x
+pip install cupy-cuda12x
+
+# ROCm 5.x
+pip install cupy-rocm-5-0
+\end{lstlisting}
+
+% ============================================================================
+\section{配置指南}
+% ============================================================================
+
+\subsection{环境配置（\texttt{.env}）}
+
+\begin{lstlisting}[style=bashcode]
+# LLM API 配置
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_MODEL=deepseek-v4-pro
+
+# Web 搜索工具 (Serper.dev)
+SERPER_API_KEY=your-serper-api-key-here
+\end{lstlisting}
+
+\subsection{集群与系综配置（\texttt{configs/}）}
+
+\subsubsection{\texttt{config.yaml} —— Slurm 与运行时配置}
+
+\begin{lstlisting}[style=yamlcode]
+workflow:
+  executor_static_check_rounds: 1     # 静态检查最大轮次
+  executor_dynamic_test_rounds: 1     # 动态测试最大轮次
+
+script:
+  shell: /bin/bash
+
+slurm:
+  partition: kshdexclu16
+  nodes: 1
+  gres: dcu:4
+  exclude: f17r3n00
+  ntasks_per_node: 4
+  ntasks_per_socket: 1
+  exclusive: true
+
+ensemble:
+  preset: C24P29                    # 系综预设名称
+  cfg_num: ["10000"]                # 组态编号
+
+runtime:
+  module_purge: true
+  modules:
+    - compiler/gnu/9.3.0
+    - mpi/hpcx/2.11.0/intel-2017.5.239
+    - compiler/dtk/25.04.4
+  exports:
+    QUDA_PATH: /path/to/quda
+    CUPY_INSTALL_USE_HIP: "1"
+  activate: source /path/to/venv/bin/activate
+  launch_mpi: mpirun
+  launch_python: python3
+\end{lstlisting}
+
+\subsubsection{\texttt{ensemble\_presets.yaml} —— 系综预设}
+
+定义 7 个格点系综的参数，包含规范组态路径、夸克质量、Clover 系数和多网格参数。
+
+\subsubsection{\texttt{skills.yaml} —— 技能路由}
+
+控制每个流水线阶段注入哪些领域知识模块。五个内置技能：
+\begin{itemize}[itemsep=2pt]
+    \item \textbf{关联函数理论}：两点/三点函数的谱分解、基态提取方法
+    \item \textbf{能谱分析}：有效质量、拟合窗口选择、激发态处理
+    \item \textbf{PyQUDA API}：场创建、Dirac 算子、求解器、HMC 用法
+    \item \textbf{规范固定}：库仑规范、Landau 规范
+    \item \textbf{数据分析}：Jackknife、Bootstrap、误差传播
+\end{itemize}
+
+% ============================================================================
+\section{命令行接口}
+% ============================================================================
+
+\subsection{基本用法}
+
+\begin{lstlisting}[style=bashcode]
+python run.py [OPTIONS]
+\end{lstlisting}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}>{\ttfamily}ll@{}}
+\toprule
+\textbf{参数}                    & \textbf{说明} \\
+\midrule
+--task "<text>"                  & 内联任务描述（跳过交互式提示）\\
+--task <file>                    & 从文件读取任务描述 \\
+--test                           & 仅生成代码，跳过 Slurm 提交 \\
+--run-dir <path>                 & 输出目录（默认: runs/<timestamp>）\\
+--non-interactive                & 自动接受所有检查点 \\
+--dotenv-path <path>             & 自定义 .env 文件路径 \\
+--list-skills                    & 列出可用技能并退出 \\
+\bottomrule
+\end{tabular}
+\caption{CLI 参数}
+\end{table}
+
+\subsection{运行示例}
+
+\begin{lstlisting}[style=bashcode]
+# 交互式运行
+python run.py
+
+# 非交互式，测试模式
+python run.py --task "Calculate pion 2pt function with momentum Pz=2" \
+    --test --non-interactive
+
+# 列出可用技能
+python run.py --list-skills
+
+# 指定输出目录
+python run.py --task "Compute proton two-point correlator" \
+    --run-dir my_experiment
+\end{lstlisting}
+
+% ============================================================================
+\section{项目结构}
+% ============================================================================
+
+\begin{lstlisting}[style=bashcode]
+LQCD_Master/
+├── run.py                          # CLI 入口点
+├── requirements.txt                # Python 依赖
+├── .env.template                   # 环境变量模板
+├── core_architecture/              # 核心流水线
+│   ├── orchestrator.py             # 工作流编排
+│   ├── planner.py                  # Planner 代理
+│   └── executor.py                 # Executor 代理
+├── utils/                          # 工具模块
+│   ├── llm_client.py               # LLM 客户端
+│   ├── tool_client.py              # 内置工具客户端
+│   ├── submit_tool.py              # Slurm 提交工具
+│   ├── prompt_loader.py            # 提示词加载器
+│   ├── skill_utils.py              # 技能系统 (Registry/Router/Runner)
+│   ├── config_utils.py             # 配置工具
+│   ├── io_utils.py                 # I/O 工具
+│   ├── static_check.py             # 静态代码分析
+│   └── generate_einsum/            # Wick 收缩与 einsum 代码生成
+├── prompts/                        # 阶段提示词模板
+│   ├── planner/                    # solve / critique / rewrite
+│   └── executor/                   # generate / critique / rewrite
+├── configs/                        # 集群、系综、技能配置
+├── skills/                         # 领域知识
+├── benchmark/                      # 70 个验证任务
+│   ├── 2pt_local/                  # 20 个局域两点函数任务
+│   ├── 2pt_nonlocal/               # 10 个非局域两点函数任务
+│   ├── wilson_loop/                # 12 个 Wilson 圈任务
+│   ├── 3pt_meson/                  # 13 个介子三点函数任务
+│   └── 3pt_baryon/                 # 15 个重子三点函数任务
+└── experiments/                    # 实验与模型评估结果
+\end{lstlisting}
+
+% ============================================================================
+\section{核心模块详解}
+% ============================================================================
+
+\subsection{WorkflowOrchestrator（工作流编排器）}
+
+\label{sec:orchestrator}
+
+\texttt{core\_architecture/orchestrator.py} 中的 \texttt{WorkflowOrchestrator} 类是整个系统的中央控制器。
+
+\begin{lstlisting}[style=pycode]
+class WorkflowOrchestrator:
+    def __init__(
+        self,
+        *,
+        task: str,                    # 用户任务描述
+        run_dir: Path,                # 运行目录
+        llm_client: Any,              # LLM 客户端
+        tool_client: Any,             # 工具客户端
+        submit_tool: Any,             # Slurm 提交工具
+        test_mode: bool = False,      # 测试模式
+        non_interactive: bool = False,# 非交互模式
+        max_revision_rounds: int = 3, # 最大修订轮次
+    ): ...
+
+    def run(self) -> dict[str, Any]:
+        """执行完整流水线，返回最终状态字典"""
+
+    def _run_planner_stage(self) -> tuple[dict, int]:
+        """运行 Planner 阶段（含人工检查点循环）"""
+
+    def _run_executor_stage(self, planner_output) -> tuple[dict, int]:
+        """运行 Executor 阶段（含静态检查与自动重写循环）"""
+
+    def _run_test_submission_stage(self, bundle, version, planner_output):
+        """运行测试提交流水线（含 Slurm 队列监控）"""
+\end{lstlisting}
+
+\textbf{执行流程}：
+\begin{enumerate}[itemsep=3pt]
+    \item Planner 生成物理计划 $\rightarrow$ 人工检查点确认
+    \item Executor 生成代码包 $\rightarrow$ 静态分析 $\rightarrow$ 自动修复循环
+    \item 人工检查点确认后提交测试作业
+    \item 监控 Slurm 队列状态与输出
+    \item 若有错误则自动重写并重新提交
+\end{enumerate}
+
+\subsection{PlannerAgent（规划代理）}
+
+\label{sec:planner}
+
+\texttt{core\_architecture/planner.py} 实现了三阶段物理规划流程：
+
+\begin{lstlisting}[style=pycode]
+class PlannerAgent:
+    def __init__(self, llm_client, tool_client, run_dir): ...
+
+    def run(self, task: str) -> dict[str, Any]:
+        """Solve → Critique → Rewrite 完整流程"""
+
+    def rewrite_with_feedback(self, task, current, feedback, version):
+        """基于人工反馈进行计划修订"""
+
+    # 三阶段
+    # 1. solve:   根据任务生成初始物理计划
+    # 2. critique: 评审计划的可行性和完整性
+    # 3. rewrite:  根据评审反馈修订计划
+\end{lstlisting}
+
+\textbf{Planner 输出格式}（\texttt{plan.yaml}）包含：
+\begin{itemize}[itemsep=2pt]
+    \item \texttt{task:} —— 任务描述
+    \item \texttt{ensemble:} —— 系综参数（格点大小、间距、夸克质量等）
+    \item \texttt{physics:} —— 物理设置（强子类型、动量、规范固定）
+    \item \texttt{measurement:} —— 测量方法（关联函数构造、收缩方案）
+    \item \texttt{output:} —— 输出文件与格式
+    \item \texttt{extras:} —— 额外参数
+\end{itemize}
+
+\subsection{ExecutorAgent（执行代理）}
+
+\label{sec:executor}
+
+\texttt{core\_architecture/executor.py} 实现了代码生成、静态分析、自动修复的完整流程：
+
+\begin{lstlisting}[style=pycode]
+class ExecutorAgent:
+    def __init__(self, llm_client, submit_tool, run_dir,
+                 tool_client=None, max_static_check_rounds=None): ...
+
+    def generate_bundle(self, *, task, planner_output, version,
+                        feedback=None, previous_bundle=None) -> dict:
+        """生成完整代码包（主程序 + Slurm 脚本 + 静态分析 + 评判）"""
+
+    def submit_test(self, bundle, version) -> dict:
+        """提交测试作业到 Slurm"""
+
+    def submit_full(self, bundle, version) -> dict:
+        """提交完整作业到 Slurm"""
+
+    def collect_evidence_paths(self, bundle, version) -> list[str]:
+        """收集所有产物路径"""
+\end{lstlisting}
+
+\textbf{Executor 子阶段}：
+\begin{enumerate}[itemsep=3pt]
+    \item \textbf{generate}：根据 Planner 输出生成 PyQUDA 代码 + Slurm 脚本
+    \item \textbf{static\_analysis}：静态分析检测代码错误
+    \item \textbf{critique}：LLM 评审生成代码的质量和正确性
+    \item \textbf{rewrite}：根据评审和静态分析结果自动重写
+    \item 步骤 2--4 循环执行直至无错误或达到最大轮次
+\end{enumerate}
+
+\subsection{技能系统}
+
+\label{sec:skills}
+
+技能系统位于 \texttt{utils/skill\_utils.py}，提供了可扩展的领域知识注入框架：
+
+\begin{lstlisting}[style=pycode]
+class SkillRegistry:
+    """技能注册表：从 skills/ 目录加载领域知识模块"""
+    def load(self) -> None
+    def names(self) -> list[str]
+
+class SkillRouter:
+    """技能路由器：根据任务选择相关技能"""
+    def route(self, context: SkillContext) -> list[str]
+
+class SkillRunner:
+    """技能运行器：执行 LLM 交互循环"""
+    def run(self, context, system_prompt, user_message,
+            fallback_tools=None) -> tuple[dict, list, list]
+
+class SkillMessageAssembler:
+    """技能消息组装器：将领域知识注入 LLM 对话"""
+\end{lstlisting}
+
+% ============================================================================
+\section{基准测试}
+% ============================================================================
+
+\subsection{验证任务体系}
+
+\texttt{benchmark/} 目录定义了 \textbf{70 个独立验证任务}，覆盖 5 类可观测量，全部基于 C24P29 系综（cfg 10000，点源，零动量）。
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{可观测量类别} & \textbf{任务数} & \textbf{示例} \\
+\midrule
+2pt local（局域两点）     & 20 & $\pi$, K, $\rho$, D, $D_s$, $J/\psi$, p, $\Lambda$, $\Xi$, $\Sigma$, $\Lambda_c$, $\Xi_c$, $\Omega_c$ \\
+2pt nonlocal（非局域两点）& 10 & $\pi$, K, $\rho$, D, $D_s$, $J/\psi$ 的 Wilson 线偏移 $z = 0\ldots10$ \\
+Wilson loop（Wilson 圈） & 12 & $W(R,T)$, $R,T\in\{1,2,3,4\}$, 平均于 XT, YT, ZT 平面 \\
+3pt meson（介子三点）    & 13 & $D\to K/\pi$, $B\to D/K/\pi$, $D\to K^*$, $B\to K^*$, $D_s\to\phi$, $K\to\pi$, $B_c\to J/\psi$ \\
+3pt baryon（重子三点）   & 15 & $p\to p$, $\Lambda\to\Lambda$, $\Lambda\to p$, $\Lambda_c\to\Lambda$, $\Xi_c\to\Xi$, $\Lambda_b\to\Lambda_c/\Lambda/p$ \\
+\bottomrule
+\end{tabular}
+\caption{基准任务分类}
+\end{table}
+
+\subsection{实验评估结果}
+
+在完整 70 任务的基准套件上进行交叉验证：
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{实验} & \textbf{骨干模型} & \textbf{精确匹配} & \textbf{符号翻转} & \textbf{准确率} \\
+\midrule
+LQCD Master GPT-5.4   & GPT-5.4         & 63 & 3  & \textbf{90.0\%} \\
+LQCD Master DeepSeek  & DeepSeek V4 Pro & 56 & 2  & \textbf{80.0\%} \\
+\bottomrule
+\end{tabular}
+\caption{实验评估结果}
+\end{table}
+
+\begin{itemize}[itemsep=2pt]
+    \item \textbf{精确匹配}：与标准方法在机器精度（$|\Delta| < 10^{-12}$）或相对误差 $< 10^{-3}$ 范围内一致
+    \item \textbf{符号翻转}：全局 $\gamma_5$-厄米性相位约定，不影响物理结果
+    \item \textbf{失败}：真正的代码生成或执行错误
+\end{itemize}
+
+% ============================================================================
+\section{详细使用示例}
+% ============================================================================
+
+\subsection{示例 1：计算 Pion 两点关联函数}
+
+\begin{lstlisting}[style=bashcode]
+# 交互式运行
+python run.py
+# 输入: Calculate the pion two-point correlator on C24P29 ensemble
+#       with momentum Pz=2 in the z-direction
+
+# 非交互式测试模式
+python run.py \
+    --task "Calculate the pion two-point correlation function with \
+            momentum smearing, Pz=2, on C24P29 ensemble cfg 10000" \
+    --test --non-interactive
+\end{lstlisting}
+
+\subsection{示例 2：计算质子两点关联函数}
+
+\begin{lstlisting}[style=bashcode]
+python run.py \
+    --task "Compute the proton two-point correlator using distillation \
+            with momentum smearing, Pz=3, Coulomb gauge fixed" \
+    --test --non-interactive
+\end{lstlisting}
+
+\subsection{示例 3：计算 Wilson 圈}
+
+\begin{lstlisting}[style=bashcode]
+python run.py \
+    --task "Compute Wilson loops W(R,T) for R=1..4, T=1..4 on C24P29, \
+            average over all spatial planes" \
+    --test
+\end{lstlisting}
+
+\subsection{示例 4：从文件读取任务}
+
+\begin{lstlisting}[style=bashcode]
+# 创建任务文件
+cat > my_task.txt << 'EOF'
+Calculate the D meson to kaon semileptonic three-point function
+on C24P29 ensemble, cfg 10000, point source at t0=0,
+sequential propagator through the sink at tsink=20,
+vector current insertion.
+EOF
+
+# 运行任务
+python run.py --task my_task.txt --test --non-interactive
+\end{lstlisting}
+
+\subsection{示例 5：非交互式全流程}
+
+\begin{lstlisting}[style=bashcode]
+python run.py \
+    --task "Compute kaon two-point correlator with point source, \
+            Pz=0, on C24P29 cfg 10000" \
+    --run-dir runs/kaon_2pt \
+    --non-interactive
+\end{lstlisting}
+
+% ============================================================================
+\section{接口清单（API Reference）}
+% ============================================================================
+
+\subsection{run.py —— 入口点}
+
+\begin{lstlisting}[style=pycode]
+def build_parser() -> argparse.ArgumentParser:
+    """构建命令行参数解析器"""
+
+def resolve_run_dir(user_run_dir: str) -> Path:
+    """解析运行目录路径"""
+
+def print_banner() -> None:
+    """打印 LQCD Master ASCII 横幅"""
+
+def prompt_task(prefilled: str = "") -> str:
+    """交互式任务提示（支持预填充）"""
+
+def list_skills() -> list[str]:
+    """列出所有可用技能名称"""
+
+def main() -> None:
+    """CLI 主入口点"""
+\end{lstlisting}
+
+\subsection{WorkflowOrchestrator}
+
+\begin{lstlisting}[style=pycode]
+class WorkflowOrchestrator:
+    _TERMINAL_SLURM_STATES = {
+        "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT",
+        "OUT_OF_MEMORY", "NODE_FAIL", "PREEMPTED",
+        "BOOT_FAIL", "DEADLINE",
+    }
+
+    def __init__(self, *, task, run_dir, llm_client,
+                 tool_client, submit_tool, test_mode=False,
+                 non_interactive=False, max_revision_rounds=3)
+
+    # 主要方法
+    def run(self) -> dict[str, Any]
+    def _run_planner_stage(self) -> tuple[dict, int]
+    def _run_executor_stage(self, planner_output) -> tuple[dict, int]
+    def _run_test_submission_stage(self, bundle, version, planner_output)
+
+    # 检查点
+    def _checkpoint_planner(self, output, version) -> tuple[bool, str]
+    def _checkpoint_executor(self, bundle, version) -> tuple[bool, str]
+
+    # Slurm 监控
+    def _inspect_slurm_queue(self, bundle, submitted_job_id) -> dict
+    def _inspect_slurm_job(self, job_id) -> dict
+    def _inspect_sacct_job(self, job_id) -> dict
+    def _wait_for_test_job_output(self, *, bundle, submitted_job_id,
+                                   poll_interval_seconds=5,
+                                   timeout_seconds=1800) -> dict
+    def _query_test_job_status(self, submitted_job_id) -> dict
+
+    # 辅助方法
+    def _save_state(self) -> None
+    def _build_test_failure_feedback(self, monitor_status) -> str
+    def _test_monitor_has_error(self, monitor_status) -> bool
+\end{lstlisting}
+
+\subsection{PlannerAgent}
+
+\begin{lstlisting}[style=pycode]
+class PlannerAgent:
+    def __init__(self, llm_client, tool_client, run_dir)
+
+    # 主要方法
+    def run(self, task: str) -> dict[str, Any]
+    def rewrite_with_feedback(self, task, current, feedback, version) -> dict
+    def validate_plan_coverage(self, plan_yaml: str) -> dict[str, Any]
+    def debug_state(self) -> dict[str, Any]
+
+    # 内部方法
+    def _run_stage(self, *, stage, build_messages, task) -> dict
+    def _chat_json_autonomous(self, user_message, *, stage, task) -> tuple
+    def _load_system_prompt(self, stage: str) -> str
+    def _build_stage_user_message(self, *, stage, payload, task) -> str
+    def _to_planner_output(self, payload, fallback=None) -> dict
+    def _normalize_critique_payload(self, payload) -> dict
+    def _load_config(self, path) -> dict
+    def _build_fixed_facts_yaml(self) -> str
+    def _persist_final(self, output) -> None
+\end{lstlisting}
+
+\subsection{ExecutorAgent}
+
+\begin{lstlisting}[style=pycode]
+class ExecutorAgent:
+    def __init__(self, llm_client, submit_tool, run_dir,
+                 tool_client=None, max_static_check_rounds=None)
+
+    # 主要方法
+    def generate_bundle(self, *, task, planner_output, version,
+                        feedback=None, previous_bundle=None) -> dict
+    def generate_and_submit_test(self, task, planner_output, version,
+                                  feedback=None, previous_bundle=None) -> tuple
+    def submit_full(self, bundle, version) -> dict
+    def submit_test(self, bundle, version) -> dict
+    def collect_evidence_paths(self, bundle, version) -> list[str]
+
+    # 内部阶段方法
+    def _run_executor_stage(self, *, task, plan_yaml, summary_md,
+                             submit_config_yaml, input_facts_yaml,
+                             executor_dir="") -> tuple
+    def _run_critique_stage(self, *, task, plan_yaml, summary_md,
+                             main_program, test_submit_script,
+                             full_submit_script, static_analysis_report) -> tuple
+    def _run_rewriter_stage(self, *, task, plan_yaml, summary_md,
+                             submit_config_yaml, input_facts_yaml,
+                             executor_dir="", current_code,
+                             critique_summary, errors, warnings,
+                             feedback) -> tuple
+    def _run_static_analysis_stage(self, *, main_program,
+                                    test_submit_script,
+                                    full_submit_script) -> dict
+
+    # 配置与 I/O
+    def _load_submit_config(self, path) -> dict
+    def _collect_input_facts(self) -> dict
+    def _probe_lime_header(self, path) -> dict
+    def _render_submit_script(self, submit_spec, *, script_dir) -> str
+
+    # 验证
+    def _require_payload_field(self, payload, key) -> str
+    def _require_submit_spec(self, payload, key, *, expected_program) -> dict
+    def _require_config_value(self, section, key) -> str
+    def _require_process_grid(self, ensemble_cfg) -> list[int]
+\end{lstlisting}
+
+\subsection{技能系统}
+
+\begin{lstlisting}[style=pycode]
+class SkillRegistry:
+    def __init__(self, skills_dir: Path)
+    def load(self) -> None
+    def names(self) -> list[str]
+    def get(self, name: str) -> dict
+
+class SkillRouter:
+    def __init__(self, registry, skills_config_path)
+    def route(self, context: SkillContext) -> list[str]
+
+class SkillContext:
+    stage: str
+    task: str
+    payload: dict
+
+class SkillRunner:
+    def __init__(self, llm_client, registry, router, assembler, tool_registry)
+    def run(self, context, system_prompt, user_message,
+            fallback_tools=None) -> tuple[dict, list, list]
+
+class SkillMessageAssembler:
+    def assemble(self, skill_names, context) -> str
+
+class ToolRegistry:
+    def __init__(self, tool_client)
+    def get(self, name: str) -> callable
+\end{lstlisting}
+
+\subsection{配置系统}
+
+\begin{lstlisting}[style=pycode]
+# config_utils.py
+def load_yaml_mapping(path: Path) -> dict[str, Any]
+def resolve_submit_config_presets(data, ensemble_presets) -> dict
+def build_prompt_ensemble_yaml(raw_config, ensemble_presets) -> str
+def build_prompt_submit_config_yaml(raw_config, ensemble_presets) -> str
+def build_runtime_launch(runtime_cfg: dict) -> str
+
+# static_check.py
+def analyze_bundle_static(*, main_program, test_submit_script,
+                           full_submit_script) -> dict
+\end{lstlisting}
+
+\subsection{Prompt 系统}
+
+\begin{lstlisting}[style=pycode]
+class PromptLoader:
+    def __init__(self, prompt_dir: Path)
+    def load(self, relative_path: str) -> str
+\end{lstlisting}
+
+提示词模板组织：
+\begin{itemize}[itemsep=2pt]
+    \item \texttt{prompts/planner/solve\_system.md} —— Planner 求解阶段系统提示
+    \item \texttt{prompts/planner/solve\_user.md} —— Planner 求解阶段用户提示模板
+    \item \texttt{prompts/planner/critique\_system.md} —— Planner 评审阶段系统提示
+    \item \texttt{prompts/planner/critique\_user.md} —— Planner 评审阶段用户提示模板
+    \item \texttt{prompts/planner/rewrite\_system.md} —— Planner 修订阶段系统提示
+    \item \texttt{prompts/planner/rewrite\_user.md} —— Planner 修订阶段用户提示模板
+    \item \texttt{prompts/planner/plan\_template.yaml} —— 计划输出模板
+    \item \texttt{prompts/executor/generate\_system.md} —— Executor 代码生成系统提示
+    \item \texttt{prompts/executor/generate\_user.md} —— Executor 代码生成用户提示模板
+    \item \texttt{prompts/executor/critique\_system.md} —— Executor 代码评审系统提示
+    \item \texttt{prompts/executor/critique\_user.md} —— Executor 代码评审用户提示模板
+    \item \texttt{prompts/executor/rewrite\_system.md} —— Executor 代码重写系统提示
+    \item \texttt{prompts/executor/rewrite\_user.md} —— Executor 代码重写用户提示模板
+\end{itemize}
+
+% ============================================================================
+\section{常见使用模式}
+% ============================================================================
+
+\subsection{交互式探索}
+
+\begin{lstlisting}[style=bashcode]
+python run.py
+# 系统会提示输入任务描述
+# 在 Planner 和 Executor 完成后都会暂停等待人工确认
+\end{lstlisting}
+
+\subsection{批量测试}
+
+\begin{lstlisting}[style=bashcode]
+# 批量运行多个任务
+for task_file in tasks/*.txt; do
+    python run.py --task "$task_file" --test --non-interactive \
+        --run-dir "runs/$(basename $task_file .txt)"
+done
+\end{lstlisting}
+
+\subsection{自定义技能扩展}
+
+在 \texttt{skills/} 目录下创建新的 YAML 文件：
+
+\begin{lstlisting}[style=yamlcode]
+# skills/my_custom_skill.yaml
+name: my_custom_skill
+description: "Custom domain knowledge for specific analysis"
+stages: [planner_solve, executor_generate]
+keywords: [keyword1, keyword2]
+content: |
+  # Custom Domain Knowledge
+  ...detailed knowledge content...
+\end{lstlisting}
+
+% ============================================================================
+\section{依赖关系}
+% ============================================================================
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{依赖}          & \textbf{版本}  & \textbf{用途} \\
+\midrule
+Python                 & $\ge$ 3.10     & 运行环境 \\
+openai                 & $\ge$ 1.0      & LLM API 客户端 \\
+prompt\_toolkit        & $\ge$ 3.0      & 交互式输入 \\
+PyYAML                 & $\ge$ 6.0      & YAML 配置解析 \\
+numpy                  & $\ge$ 1.24     & 数值计算 \\
+opt\_einsum            & $\ge$ 3.3      & 优化张量收缩 \\
+CuPy                   & 按 CUDA/ROCm   & GPU 加速 \\
+PyQUDA + QUDA          & 从源码安装      & 格点 QCD 计算 \\
+Slurm                  & —              & 集群作业调度 \\
+Serper.dev API         & —              & Web 搜索（可选）\\
+\bottomrule
+\end{tabular}
+\caption{完整依赖列表}
+\end{table}
+
+% ============================================================================
+\section{贡献指南}
+% ============================================================================
+
+\begin{enumerate}[itemsep=4pt]
+    \item 自定义 \texttt{configs/config.yaml} 和 \texttt{configs/ensemble\_presets.yaml} 以适配您的集群
+    \item 在 \texttt{skills/} 下添加新技能以扩展领域知识
+    \item 在 \texttt{benchmark/} 中扩展验证任务和标准方法参考
+    \item 对新 LLM 骨干模型运行交叉验证以评估性能
+\end{enumerate}
+
+\end{document}
