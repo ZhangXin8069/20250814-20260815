@@ -1,0 +1,15 @@
+{"step": "00_environment_check", "elapsed_s": 0.245, "mem_before_mb": 26.1, "mem_after_mb": 58.6, "mem_delta_mb": 32.5, "mem_peak_gb": 0.06, "timestamp": "2026-07-27T03:31:03.597233"}
+{"step": "load_eigvecs", "elapsed_s": 2.99, "mem_before_mb": 60.4, "mem_after_mb": 6895.0, "mem_delta_mb": 6834.6, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T03:31:06.605772"}
+{"step": "load_eigvals", "elapsed_s": 0.002, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T03:31:06.615685"}
+{"step": "VVV_Pz-2_conf6250", "elapsed_s": 1130.094, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T03:49:56.741241", "conf_id": 6250, "Pz": -2, "Nev1": 100}
+{"step": "Wick_Pz-2_conf6250", "elapsed_s": 3172.651, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:42:49.716365", "conf_id": 6250, "Pz": -2, "Nev1": 100}
+{"step": "meff_Pz-2_conf6250", "elapsed_s": 0.009, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:42:49.738528", "conf_id": 6250, "Pz": -2}
+{"step": "01_compute_2pt", "elapsed_s": 4306.46, "mem_before_mb": 60.4, "mem_after_mb": 6895.0, "mem_delta_mb": 6834.6, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:42:49.858057"}
+{"step": "read_gauge_conf6250", "elapsed_s": 24.945, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:43:16.656166", "conf_id": 6250}
+{"step": "validate_gauge_conf6250", "elapsed_s": 0.01, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:43:16.703311", "conf_id": 6250}
+{"step": "ope_mu0_nu1_conf6250", "elapsed_s": 29.997, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:43:46.733729", "conf_id": 6250, "mu": 0, "nu": 1}
+{"step": "ope_mu3_nu0_conf6250", "elapsed_s": 29.904, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:44:16.671558", "conf_id": 6250, "mu": 3, "nu": 0}
+{"step": "ope_mu3_nu1_conf6250", "elapsed_s": 29.897, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:44:46.605374", "conf_id": 6250, "mu": 3, "nu": 1}
+{"step": "02_compute_ope", "elapsed_s": 115.013, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:44:46.676128"}
+{"step": "03_huangcl_analysis", "elapsed_s": 1.975, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:44:48.691405"}
+{"step": "04_final_report", "elapsed_s": 0.001, "mem_before_mb": 6895.0, "mem_after_mb": 6895.0, "mem_delta_mb": 0.0, "mem_peak_gb": 6.73, "timestamp": "2026-07-27T04:44:48.747601"}

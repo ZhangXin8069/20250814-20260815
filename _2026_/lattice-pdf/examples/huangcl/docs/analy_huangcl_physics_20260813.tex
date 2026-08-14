@@ -1,0 +1,692 @@
+\documentclass[UTF8]{ctexart}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+
+\title{examples/huangcl 流水线代码与物理公式映射分析}
+\author{opencode analyze}
+\date{2026-08-13}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{gray!10},
+  frame=single,
+  breaklines=true,
+  language=python,
+  firstnumber=auto,
+  columns=fullflexible,
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本文档对 \texttt{examples/huangcl}（黄 CL 的 L24x72 系综 4 步分析流水线）的全部
+Python/Shell 代码进行只读分析，并为每段代码建立其对应的物理公式映射。
+分析范围覆盖现行流水线（\texttt{00\_contract}、\texttt{01\_proton\_contract}、
+\texttt{02\_ratio}、\texttt{03\_ana\_ratio}、\texttt{03\_bare\_matrix}、
+\texttt{04\_proton\_energy}、\texttt{05\_ana\_3dir\_diff\_sem}、\texttt{98\_tools}）
+与历史参考流水线（\texttt{99\_ref\_code}）。核心物理内容为：非极化胶子准 PDF 的
+非定域 OPE 算符（Clover 场强张量 + Wilson 线）、动量涂抹蒸馏质子 2pt、
+断连 3pt/2pt 比值 $R(z)$ 与谱展开拟合、质子有效能量提取，以及 LaMET
+（大动量有效理论）匹配与 PDF 重建。每个结论均附 \texttt{文件:行号} 参考源。
+\end{abstract}
+
+\tableofcontents
+
+% =====================================================================
+\section{仓库概览}
+
+\begin{itemize}
+  \item \textbf{git}：分支 \texttt{main}，HEAD \texttt{4b41ec0}（2026-08-13）。
+  \item \textbf{规模}：54 个 Python 文件、29 个 Shell 脚本；现行流水线核心代码约 8600 行
+        （\texttt{00\_contract} 1105 行 + \texttt{02\_ratio} 3392 行 +
+        \texttt{04\_proton\_energy} 819 行 + \texttt{98\_tools} 2125 行）。
+  \item \textbf{结构}：
+\begin{verbatim}
+00_contract/         步骤 0: GPU(CuPy) OPE + 质子 2pt
+01_proton_contract/  步骤 1: GPU(CuPy) 质子 2pt 蒸馏（脚本同步骤 0）
+02_ratio/            步骤 2: 3pt/2pt 比值 R(z) + jackknife + 谱拟合
+03_ana_ratio/        步骤 3: 比值结果绘图分析
+03_bare_matrix/      步骤 3 变体: bare 矩阵比值
+04_proton_energy/    步骤 4: 质子有效能量 + cosh/平台拟合
+05_ana_3dir_diff_sem/步骤 5: 三方向差异与 SEM 直方图
+98_tools/            共享工具库（γ 矩阵、IO、统计、绘图）
+99_ref_code/         历史完整 PDF 流水线（zengch 系，见 readme.txt）
+\end{verbatim}
+  \item \textbf{数据路径}：全部指向集群 \texttt{/public/...}，本机不可解析
+        （\texttt{02\_ratio/code.py:270-281} 等）。
+\end{itemize}
+
+% =====================================================================
+\section{物理框架总述}
+
+该流水线计算质子非极化胶子 PDF（LaMET 框架）。总体方程链为：
+
+\begin{enumerate}[itemsep=2pt]
+  \item \textbf{非定域 OPE 算符}（步骤 0）：胶子准分布算符
+  \begin{equation}
+    \mathcal{O}_{g}(z,\mu) = \sum_{i=1,2} \,\mathrm{Tr}\left[
+      F_{3i}(0)\,W(0\to z)\,F_{3i}(z)\,W(z\to 0) \right],
+    \qquad W(0\!\to\! z)=\prod_{k=0}^{z/a-1} U_3(k\hat{z})
+  \end{equation}
+  其中 $F_{\mu\nu}$ 为 Clover 场强张量，$W$ 为沿 $z$ 方向的 Wilson 线。
+  数值实现用对偶场强 $\tilde F_{\mu\nu}=\tfrac12\varepsilon_{\mu\nu\rho\sigma}F_{\rho\sigma}$
+  的算符组合（见 \S3.1）。
+  \item \textbf{断连三点点关联函数}：$\langle O\rangle\langle C_2\rangle$ 的断连图减法
+  \begin{equation}
+    C_3^{\rm disc}(t,\tau;z) = \frac{1}{N_t}\sum_{t_i}\Big[
+      \langle \mathcal{O}(z,t_i+\tau)\,C_2(t_i,t_i+t)\rangle
+      - \langle \mathcal{O}\rangle\langle C_2\rangle\Big]
+  \end{equation}
+  （\texttt{02\_ratio/code.py:327-333}）。
+  \item \textbf{比值与谱展开}（步骤 2）：
+  \begin{equation}
+    R(z;t,\tau)=\frac{C_3^{\rm disc}(t,\tau;z)}{C_2(t)}
+    = c_0(z) + c_1\,e^{-\Delta E\,\tau} + c_1\,e^{-\Delta E\,(t-\tau)} + \cdots
+  \end{equation}
+  基态矩阵元 $c_0(z)$ 即准分布 $\tilde h(x,P_z)$ 的坐标空间量。
+  \item \textbf{LaMET 匹配}（\texttt{99\_ref\_code/matching.py}）：
+  \begin{equation}
+    h(x,\mu) = \int_{-1}^{1}\frac{dy}{|y|}\; C\!\left(\frac{x}{y}\right)\,
+    \tilde h(y,P_z) + \mathcal{O}\!\left(\frac{\Lambda_{\rm QCD}^2}{P_z^2}\right),
+  \end{equation}
+  匹配系数 $C(\xi)$ 见 \S5.6。
+\end{enumerate}
+
+% =====================================================================
+\section{步骤 0 -- 00\_contract：OPE 与质子 2pt（CuPy GPU）}
+
+\subsection{Operator.py -- Clover 场强张量与非定域算符}
+
+\paragraph{Levi-Civita 张量} \texttt{Operator.py:9-39} 构造
+$\texttt{Tensor4}[i,j,k,l] = \tfrac12\varepsilon_{ijkl}$（完全反对称，重复指标置零）。
+它用于对偶场强 $\tilde F_{\mu\nu}=\tfrac12\varepsilon_{\mu\nu\rho\sigma}F_{\rho\sigma}$
+（\texttt{plaquette\_clover\_all\_tilde}，\texttt{Operator.py:177-184}）：
+
+\lstinputlisting[firstline=177,lastline=184]{/root/lattice-pdf/examples/huangcl/00_contract/00_code/Operator.py}
+
+\paragraph{Clover 场强张量} \texttt{plaquette\_clover\_new}（\texttt{Operator.py:77-160}）
+用 4 个方向方圈 $P_{\mu\nu}$ 构造无改进 $O(a^2)$ 场强张量：
+
+\begin{equation}
+  F_{\mu\nu}^{\rm clover}(x) = \frac{-i}{8}\sum_{\mathrm{plaq}}
+  \left[P_{\mu\nu}(x) - P_{\mu\nu}^\dagger(x)\right],\qquad
+  P_{\mu\nu}(x)=U_\mu(x)U_\nu(x\!+\!\hat\mu)U_\mu^\dagger(x\!+\!\hat\nu)U_\nu^\dagger(x)
+\end{equation}
+
+代码对应（\texttt{Operator.py:150-160}）：
+
+\lstinputlisting[firstline=150,lastline=161]{/root/lattice-pdf/examples/huangcl/00_contract/00_code/Operator.py}
+
+\paragraph{非定域算符（Wilson 线 + 双场强）}
+\texttt{operators\_new\_z0\_mu2}（\texttt{Operator.py:339-368}）实现两点非定域算符：
+
+\begin{equation}
+  \mathcal{O}_{\mu\nu;\mu'\nu'}(z) = \sum_{\vec x_\perp}\mathrm{Tr}\Big[
+    F_{\mu\nu}(0)\, W(0\!\to\!z)\, \tilde F_{\mu'\nu'}(z)\, W(z\!\to\!0)\Big]
+\end{equation}
+
+\lstinputlisting[firstline=339,lastline=368]{/root/lattice-pdf/examples/huangcl/00_contract/00_code/Operator.py}
+
+物理约定：$\texttt{zdir}$（0=x,1=y,2=z）为分离方向；代码中 \texttt{np.roll} 沿
+轴 \texttt{3-zdir} 平移即沿该方向做 Wilson 线链接平移；\texttt{pla\_tilde[mu2,nu2]}
+为对偶场强。谱分解 $\mathrm{Tr}[FWFW^\dagger]\to e^{-z/\,\text{corr}}$ 给出 z 依赖。
+
+\subsection{Calc\_ope\_unpol.py -- 组态 OPE 计算}
+
+\texttt{Calc\_ope\_unpol.py:74-90} 将 $(\mu,\nu)$ 指标对按 3 个 MPI rank 拆分：
+
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+rank & $(\mu,\nu)$ & 物理内容 \\
+\midrule
+0 & $(3,(z+1)\%3)$ & $F_{t i} \tilde F_{t i}$ \\
+1 & $(3,(z+2)\%3)$ & $F_{t j} \tilde F_{t j}$ \\
+2 & $((z+1)\%3,(z+2)\%3)$ & $F_{i j} \tilde F_{i j}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+主循环（\texttt{Calc\_ope\_unpol.py:122-133}）对每个 $z=\delta_z a$ 计算
+$\mathrm{ops}[:,z]=\sum_{\vec x_\perp}\mathrm{Tr}[F_{\mu\nu}(0)W\tilde F_{\mu'\nu'}(z)W^\dagger]$
+并保存 \texttt{ops\_mu\{m\}\_nu\{n\}\_dz\{d\}\_conf\{c\}.npy}（即
+\texttt{ops\_mu3\_nu0\_dz24\_conf6200.npy} 等，被步骤 2 读取）。
+规范场读取：\texttt{>f8} 大端双精度 ildg 二进制，reshape 为
+$[N_t,N_x,N_x,N_x,4,3,3,2]$（\texttt{Calc\_ope\_unpol.py:95-100}）。
+
+\subsection{2pt\_proton\_Cg5gmu\_L32x64\_mom2\_xdir\_gpu.py -- 蒸馏质子 2pt}
+
+该脚本（\texttt{00\_contract} 与 \texttt{01\_proton\_contract} 各一份，内容基本一致，
+仅 import 顺序不同）实现蒸馏法质子两点函数。
+
+\paragraph{插值算符与宇称投影}
+\texttt{2pt\_proton\_Cg5gmu\_L32x64\_mom2\_xdir\_gpu.py:102-105}：
+
+\begin{equation}
+  \Gamma_+ = \tfrac12(\gamma_0+\gamma_4)\ \text{(正宇称投影)},\qquad
+  \Gamma_- = \tfrac12(\gamma_0-\gamma_4)\ \text{(负宇称投影)}
+\end{equation}
+
+\paragraph{动量投影相位} \texttt{phase\_calc}（\texttt{:155-165}）：
+\begin{equation}
+  e^{-i\vec P\cdot\vec x} = \exp\!\left(-i\frac{2\pi}{N_x}\vec n\cdot\vec P\right)
+\end{equation}
+其中 \texttt{momsmear\_phase=-3}（x 方向动量涂抹，\texttt{:57-58}）。
+
+\paragraph{三特征矢张量 VVV} \texttt{VVV\_Calc\_cupy}（\texttt{:244-318}）：
+\begin{equation}
+  \mathcal{V}^{abc} = \sum_{\vec x} e^{-i\vec P\cdot\vec x}\,
+  \varepsilon^{abc}\,V^a(\vec x)V^b(\vec x)V^c(\vec x)
+\end{equation}
+$\varepsilon^{abc}$（反对称）体现在 6 个 \texttt{contract} 项的符号组合上
+（\texttt{:261-305}，3 正 3 负，对应排列奇偶）。
+
+\paragraph{Wick 收缩}（\texttt{:366-387}）：质子 2pt 的蒸馏收缩
+\begin{equation}
+  C_{2}(t_{\rm sink},t_{\rm source}) = \mathrm{Tr}\left[\Gamma_+\,
+  \sum_{a,b,c,d,e,f}\varepsilon_{abc}\varepsilon_{def}\,
+  \mathcal{V}^{aia}_{t_{\rm sink}}\tau^{id}_{t_{\rm sink},t_{\rm source}}
+  (\gamma_5\gamma_4\,\tau\,\gamma_5\gamma_4)^{dbe}\mathcal{V}^{cf}_{t_{\rm source}}\right]
+\end{equation}
+代码中两项之差（\texttt{:373-387}）为交换（减去）图。$\Gamma$ 矩阵
+\texttt{gamma(7)@gamma(4)} = $\gamma_3\gamma_1\gamma_4$ 为 \texttt{Cg5g4}
+插值算符投影（\texttt{:134-136}），对应插值算符
+$\chi = \varepsilon_{abc}(C\gamma_5\gamma_4)^{a b}\,\psi^c$。
+末态用正宇称投影 \texttt{matrix\_pplus} 得到
+\texttt{contrac\_nucl\_pp}（\texttt{:408-409}）。
+
+% =====================================================================
+\section{步骤 2 -- 02\_ratio：3pt/2pt 比值与谱拟合}
+
+\subsection{code.py / code\_1.py -- 主比值流水线}
+
+\paragraph{OPE 组合系数}（\texttt{code.py:286}）：
+\begin{equation}
+  \mathcal{O}(z,\tau) = -O_{ti} - O_{tj} + 2\,O_{ij},
+  \qquad O_{\mu\nu} = \mathrm{Tr}\big[F_{\mu\nu}(0)W\tilde F_{\mu\nu}(z)W^\dagger\big]
+\end{equation}
+即准 PDF 算符 $\sum_{i=1,2} \mathrm{Tr}[F_{3i}W\tilde F_{3i}W^\dagger]$ 的
+等价组合（$i,j$ 为与分离方向垂直的两个横向量方向；t 方向为 3）。同一组合出现在
+\texttt{code\_02\_ratio.py:254}（按轴 \texttt{axis} 动态选取 $t_i,t_j$ 对）。
+
+\paragraph{断连图与比值}（\texttt{code.py:327-333}）：
+\begin{equation}
+  C_3^{\rm disc}(t,\tau;z) = \Big\langle
+  \mathcal{O}(z,\tau)\,C_2(t)\Big\rangle_{t_i} -
+  \langle \mathcal{O}(z,\tau)\rangle_{t_i}\langle C_2(t)\rangle_{t_i},
+  \qquad
+  R(z;t,\tau) = \frac{C_3^{\rm disc}(t,\tau;z)}{C_2(t)}
+\end{equation}
+对源时间 $t_i$ 平均（时间平移不变）后用 jackknife 重采样（\texttt{:195-206}）。
+
+\paragraph{谱展开拟合模型}（\texttt{code.py:354-360}）：
+\begin{equation}
+  R(z;t,\tau) = c_0(z) + c_1\,e^{-\Delta E\,\tau} + c_1\,e^{-\Delta E\,(t-\tau)}
+\end{equation}
+物理来源：基态 + 第一激发态的谱分解，
+$c_0(z)\propto\langle N(P)|\mathcal{O}_g(z)|N(P)\rangle$ 为欲提取的基态矩阵元。
+拟合用 \texttt{lsqfit.nonlinear\_fit}（prior 正则化，\texttt{:416-418}），
+协方差由样本计算（\texttt{calc\_cov}，\texttt{:209-220}），
+$\chi^2/dof$ 支持 SVD 截断（\texttt{:223-254}）。
+
+\texttt{code\_1.py} 为同一流水线的变体：拟合范围加 \texttt{cut} 前后截断
+（\texttt{code\_1.py:314-318}）、用 \texttt{p0} 而非 prior（\texttt{:351-353}）。
+
+\subsection{code\_02\_ratio.py -- 六方向多动量比值}
+
+\texttt{compute\_ope}（\texttt{code\_02\_ratio.py:209-261}）按轴读取三组 OPE 并组合；
+\texttt{compute\_ratio}（\texttt{:265-368}）对每个动量（Pz=2..8 的六个方向
+pos/neg\_x/y/z）计算比值，其中断连减法与谱公式同 \S4.1。
+\texttt{03\_bare\_matrix/code\_02\_ratio.py} 为同一代码的 bare 矩阵变体
+（去掉 \texttt{momsmear} 相位路径，输出 bare 比值）。
+
+\subsection{9\_others/Calc\_3pt.py -- Chroma IOG 3pt 提取}
+
+读取 6 方向（$\pm x,\pm y,\pm z$）2pt 与正负 z OPE 文件
+（\texttt{Calc\_3pt.py:38-43}），构造
+\begin{equation}
+  O_{\rm sym} = \frac{O(+z)-O(-z)}{2}
+  \qquad(\text{时间反演对称组合，}\texttt{:187})
+\end{equation}
+并对 $\langle O\rangle\langle C_2\rangle$ 减断连项后得到
+\texttt{threept} 数组（\texttt{:219-237}）：
+\begin{equation}
+  C_3(t,\tau;z) = \sum_{t_i}\big[O(t_i+\tau)-\langle O\rangle\big]\,
+  \big[C_2(t_i,t_i+t)-\langle C_2\rangle\big]
+\end{equation}
+
+\subsection{9\_others/Fit\_Ratio.py -- 多参数比值拟合}
+
+拟合模型（\texttt{Fit\_Ratio.py:155-163}）：
+\begin{equation}
+  R(t_{\rm sep},t_{\rm ins}) = A + B\Big[e^{-\Delta E\,(t_{\rm sep}-t_{\rm ins})}
+  + e^{-\Delta E\,t_{\rm ins}}\Big]
+\end{equation}
+即 \S4.1 中谱模型（含正反传播方向两项之和）。
+
+% =====================================================================
+\section{步骤 3/5 -- 结果分析脚本}
+
+\subsection{03\_ana\_ratio/code.py}
+
+纯绘图分析：读取 \texttt{02\_ratio/1\_result/} 的 ratio.npy 与拟合 npz
+（\texttt{code.py:156-189}），绘制 $R$ vs $(t_{\rm ins}-t_{\rm sep}/2)$ 散点
+（物理横轴为插入点关于中点对称化）、$c_0$ vs $z$ 与 $\chi^2$ vs $z$。
+无新增物理公式，仅数据可视化（横轴 $t_{\rm ins}-\tfrac12 t_{\rm sep}$
+对应谱模型指数对称项 $e^{-\Delta E\tau}+e^{-\Delta E(t-\tau)}$ 的镜像对称性）。
+
+\subsection{05\_ana\_3dir\_diff\_sem/code\_ana\_3dir\_diff\_sem.py}
+
+比较 x/y/z 三方向数据：读取三个方向与平均的 ratio/corr2（\texttt{:211-274}），
+有效质量（\texttt{compute\_eff\_mass}，\texttt{:276-}）：
+\begin{equation}
+  aE_{\rm eff}(t) = \ln\frac{C_2(t)}{C_2(t+1)}
+\end{equation}
+并绘制 ratio/corr2/meff 在各 (t,τ,z) 切片的 jackknife 样本直方图
+（\texttt{plot\_ratio\_histogram} 等，\texttt{:349-}），用于检查
+三个方向的系统差。
+
+% =====================================================================
+\section{步骤 4 -- 04\_proton\_energy：质子有效能量}
+
+\subsection{code.py -- cosh 谱拟合与有效质量}
+
+两点函数谱展开模型（\texttt{code.py:225-231}）：
+\begin{equation}
+  C_2(t) = c_0\,e^{-E_0 t}\Big(1 + c_1\,e^{-\Delta E\,t}\Big)
+\end{equation}
+基态能量 $E_0$ 即质子在动量 $(0,0,2)$ 的能量；用 \texttt{lsqfit} 对每个
+jackknife 样本拟合（\texttt{:268-278}）。有效质量图（\texttt{:354}）：
+\begin{equation}
+  m_{\rm eff}(t) = \ln\frac{C_2(t)}{C_2(t+1)}\times\frac{\hbar c}{a},
+  \qquad \frac{\hbar c}{a} = \frac{0.197\,\mathrm{GeV\cdot fm}}{0.1053\,\mathrm{fm}}
+  \ \text{(单位换算，}\texttt{:102}\text{)}
+\end{equation}
+物理：$m_{\rm eff}(t)\to E_0$ 平台（基态主导），平台拟合取
+$t\in[6,12]$（\texttt{:105-109}）。
+
+\subsection{code\_proton\_energy.py -- 三方向平均}
+
+读取 x/y/z 三个方向的 2pt（\texttt{:166-188}），取平均
+\texttt{corr2\_ave}（\texttt{:231}）：
+\begin{equation}
+  C_2^{\rm ave} = \frac{C_2^x + C_2^y + C_2^z}{3}
+\end{equation}
+并画三方向有效质量与 jackknife SEM 对比（\texttt{:265-304}）。
+拟合部分为 TODO（\texttt{:253-257}）。
+
+% =====================================================================
+\section{98\_tools -- 共享工具库}
+
+\subsection{gamma\_matrix\_cupy\_DR.py -- DeGrand-Rossi 基 $\gamma$ 矩阵}
+
+DR（手征）基的显式表示（\texttt{gamma\_matrix\_cupy\_DR.py:7-46}）：
+\begin{equation}
+  \gamma_4 = \begin{pmatrix} I & 0\\ 0 & -I \end{pmatrix}\ (\text{对角}),
+  \quad \gamma_5 = \mathrm{diag}(1,1,-1,-1), \quad
+  \{\gamma_\mu,\gamma_\nu\}=2\delta_{\mu\nu}
+\end{equation}
+具体矩阵元（\texttt{:14-46}）：$\gamma_1,\gamma_2,\gamma_3$ 反厄米纯虚/实
+组合，满足 Clifford 代数。索引约定：\texttt{gamma(i)}，i=0..5 为单位矩阵与
+$\gamma_1..\gamma_5$；i=6..15 为乘积（如 \texttt{gamma(7)=gamma(3)@gamma(1)}
+= $-\gamma_2\gamma_4\gamma_5$，\texttt{:70-71}）；i=16,17 为
+$\tfrac12(1\pm\gamma_4)$ 宇称投影（\texttt{:97-105}）。
+
+\subsection{input\_output\_4\_cupy.py -- 蒸馏量 IO}
+
+\begin{itemize}
+  \item \texttt{readin\_eigvecs\_*}：特征矢二进制
+        （每矢 $N_x^3\times 3\times 2$ 个 f8，\texttt{:14-35}）；
+  \item \texttt{readin\_peram\_*}：perambulator
+        $\tau[t_{\rm sink},d_{\rm sink},d_{\rm source},ev_{\rm sink},ev_{\rm source}]$
+        （\texttt{:39-81}）；
+  \item \texttt{readin\_VVV\_*}：三特征矢张量（\texttt{:84-141}）；
+  \item \texttt{VdV\_sink\_t\_link}（\texttt{:339-370}）：规范链作用
+        $V^\dagger U^{\pm n}V$（用于含规范线的算符）；
+  \item \texttt{Mom\_VVV\_sink\_t}（\texttt{:396-422}）：含动量相位的 VVV；
+  \item \texttt{phase\_exp\_2pt/3pt}：动量相位（\texttt{:316-336}）。
+\end{itemize}
+
+\subsection{analysis\_tools.py -- 统计与绘图}
+
+\begin{itemize}
+  \item \texttt{sem}（\texttt{:96-115}）：jackknife 标准误
+        $\sigma=\mathrm{std}\times\sqrt{N-1}$；
+  \item \texttt{resample}（\texttt{:118-152}）：jackknife
+        $\bar x^{[k]} = (N\bar x - x_k)/(N-1)$ 或 bootstrap（矩阵乘法加速）；
+  \item \texttt{calc\_cov}/\texttt{calc\_chi2}（\texttt{:155-244}）：
+        $C_{ij}=\frac{1}{N}\sum_k\Delta_i^{(k)}\Delta_j^{(k)}$（jackknife 乘
+        $(N-1)/N$），$\chi^2=\Delta^T C^{-1}\Delta$；
+  \item \texttt{fit}（\texttt{:251-331}）：对每个样本做 \texttt{lsqfit} 非线性拟合；
+  \item 绘图函数族 \texttt{plot\_*}（\texttt{:432-782}）。
+\end{itemize}
+
+% =====================================================================
+\section{99\_ref\_code -- 历史完整 PDF 流水线}
+
+\texttt{readme.txt}（\texttt{99\_ref\_code/readme.txt}）给出完整链条：
+\texttt{C\_pt\_load} $\to$ \texttt{fit\_ratio} $\to$ \texttt{hB\_data}
+$\to$ \texttt{fit\_zr} $\to$ \texttt{fit\_hR\_big\_lambda}
+$\to$ \texttt{matching} $\to$ \texttt{fit\_pz\_a\_extrapolatiing}，
+辅以 \texttt{fit\_2pt}/\texttt{fit\_E0}/\texttt{data\_chose}/\texttt{draw}。
+
+\subsection{C\_pt\_load.py -- 关联函数加载与比值}
+
+读取 2pt/3pt 与 OPE（\texttt{C\_pt\_load.py:98-271}），构造
+\texttt{C2pt}/\texttt{C3pt} 类并输出 \texttt{delta\_matrix}（相对时间矩阵）
+与 Ratio 数据。物理与 \S4.1 相同：断连 3pt $C_3^{\rm disc}=C_3-\langle O\rangle C_2$。
+
+\subsection{fit\_ratio.py -- 谱展开比值拟合}
+
+模型（\texttt{fit\_ratio.py:32-42}）：
+\begin{equation}
+  R(z;t,\tau) = c_0 + c_1\,e^{-\Delta E(t-\tau)} + c_1\,e^{-\Delta E\,\tau}
+  + c_2\,e^{-\Delta E\,t}
+\end{equation}
+比 \S4.1 多出 $e^{-\Delta E t}$ 项（源与汇共有的激发态贡献），
+对应更完整的两态谱展开。
+
+\subsection{hB\_data.py -- 归一化与插值}
+
+将 $c_0(z)$ 归一化（$z\to 0$ 处 $h_B=1$）并插值得到 $\log h_B(z)$
+（\texttt{hB\_data.py:28-97}）：
+\begin{equation}
+  h_B(z) = \frac{c_0(z)}{c_0(0)},\qquad \log h_B(z)\ \text{作插值外推}
+\end{equation}
+
+\subsection{fit\_zr\_new.py -- 重整化因子拟合}
+
+MS 方案一阶匹配（\texttt{fit\_zr\_new.py:39-49}）：
+\begin{equation}
+  Z_{\overline{\rm MS}}(z,\mu) = 1 + \frac{\alpha_s C_A}{4\pi}
+  \left[\frac53\ln\!\left(\frac{z^2\mu^2}{4e^{-2\gamma_E}}\right) + 3\right]
+\end{equation}
+格点数据拟合模型（\texttt{th\_ZR}，\texttt{:124-152}）：
+\begin{equation}
+  \ln Z(z,a,\mu) = \frac{k\,z}{a\ln(a\Lambda_{\rm QCD})}
+  + \frac{5C_A}{3b_0}\ln\frac{\ln(1/a\Lambda)}{\ln(\mu/\Lambda)}
+  + \frac12\ln\!\left(1+\frac{d}{\ln(a\Lambda)}\right)^2
+  + (m_0+m_2 a^2)z + \sum_k f_k\,a^k(z)
+\end{equation}
+（幂律对数项 + 对数运行项 + 线性质量项 + 小 z 多项式，拟合确定
+$k,d,m_0,m_2,f_k$）。
+
+\subsection{fit\_hR\_big\_lambda.py -- 大 Ioffe 时间外推与傅里叶变换}
+
+Ioffe 时间 $\lambda = z\cdot P_z$（\texttt{fit\_hR\_big\_lambda.py:137-161}），
+外推模型（\texttt{:178-179}）：
+\begin{equation}
+  h_R(\lambda) = l_1\,\lambda^{-a_1}\,e^{-\lambda/\lambda_0}
+  \qquad (\text{大 }\lambda\text{ 指数衰减})
+\end{equation}
+拟合后对 $x$ 做（准）傅里叶变换：
+\begin{equation}
+  \tilde h(x) \propto \int d\lambda\, e^{i x\lambda}\, h_R(\lambda)
+\end{equation}
+
+\subsection{matching.py -- LaMET 匹配}
+
+匹配系数（\texttt{matching.py:86-112}），分三区：
+\begin{align}
+  g_1(\xi<0) &= -2\frac{(1-\xi+\xi^2)^2}{1-\xi}\ln\frac{\xi}{\xi-1}
+  - \frac{11-28\xi+18\xi^2-12\xi^3}{6(1-\xi)} \\
+  g_2(0<\xi<1) &= 2\frac{(1-\xi+\xi^2)^2}{1-\xi}
+  \left[-\ln\frac{\mu^2}{4y^2P_z^2}+\ln(\xi(1-\xi))\right]
+  - \frac{15-56\xi+102\xi^2-96\xi^3+48\xi^4}{6(1-\xi)} \\
+  g_3(\xi>1) &= -g_1(\xi)
+\end{align}
+以及分布项 $g_0 = \frac56\left[-\frac{1}{|1-\xi|} + \frac{2}{\pi}\frac{\mathrm{Si}((1-\xi)|y|\lambda_s)}{1-\xi}\right]$
+（\texttt{:98-101}，$\lambda_s = 0.3\,\mathrm{GeV}/\,\text{fm}\times P_z$，
+\texttt{:64}）。LO 卷积矩阵（\texttt{:122-126}）：
+\begin{equation}
+  \tilde h(y) = \sum_x \frac{dx}{|x|}\,
+  \left[\delta_{xy} + \frac{\alpha_s C_A}{2\pi}\,M_{xy}\right]^{-1}_{yx'}\,
+  \tilde h_0(y'), \qquad
+  M = \frac{g(x/y)}{y} - \delta_{xy}\,y\,\sum_{x}\frac{g(x/y)}{y^2}
+\end{equation}
+实现为 \texttt{z\_ij} 矩阵求逆（\texttt{matching.py:124-126}）。
+
+\subsection{fit\_pz\_a\_extrapolatiing.py -- 格距与动量外推}
+
+\begin{equation}
+  h(x;a,P_z) = xg_0 + a^2 f_x + a^4 l_x + a^2P_z^2 h_x
+  + \frac{d_x}{P_z^2} + \frac{b_x}{P_z}
+  + k_x\big(m_\pi^2 - m_\pi^{\rm phys\,2}\big) + c_x\,e^{-L\,a\,m_\pi}
+\end{equation}
+（\texttt{fit\_pz\_a\_extrapolatiing.py:37}，$O(a^2)$ 格距修正 +
+$1/P_z$ 幂次项 + 手征外推）。
+
+\subsection{fit\_2pt.py / fit\_E0.py -- 两态拟合与色散关系}
+
+\begin{equation}
+  C_2(t) = c_4 e^{-E_0 t}\big(1 + c_5 e^{-\Delta E\,t}\big)
+  \quad(\texttt{fit\_2pt.py:19-21})
+\end{equation}
+\begin{equation}
+  E_0(P_z) = \sqrt{m^2 + k_2 P_z^2 + k_3 P_z^4 a^2}
+  \quad(\texttt{fit\_E0.py:25-27})
+\end{equation}
+后者为相对论色散关系的格点形式（$k_2\to 1$，$k_3$ 为 $O(a^2)$ 修正）。
+
+\subsection{fit\_ratio\_FeynmenHellman.py -- Feynman-Hellmann 比值提取}
+
+对固定 $z$ 用 \texttt{Minuit}（\texttt{LeastSquares}）拟合比值均值
+与协方差（\texttt{fit\_ratio\_FeynmenHellman.py:22-110}），再取
+$c_0$ vs $z$（\texttt{:112-133}）。Feynman-Hellmann 思想：
+$\langle O\rangle = \partial E(\lambda)/\partial\lambda|_{\lambda=0}$，
+此处以两态模型拟合提取基态矩阵元。
+
+\subsection{matching\_cc.py -- 匹配系数另一实现}
+
+电荷共轭（cc）形式匹配核（\texttt{matching\_cc.py:53-69}）：
+\begin{equation}
+  C(\xi,m,r)\propto \frac{(1+\xi^2)}{1-\xi}\ln\frac{\xi}{\xi-1}
+  + 1 + \frac{3\,\mathrm{Si}((1-\xi)|m|)}{\pi(1-\xi)}
+  \ \ (\xi<0), \quad \text{等}
+\end{equation}
+（$\mathrm{Si}$ 为积分正弦函数）。
+
+\subsection{TMD\_SIDIS\_DY.py -- Sivers TMD（独立主题）}
+
+Sivers 函数与 SIDIS/DY 自旋不对称性理论代码：
+\begin{equation}
+  A_{UT}^{\mathrm{SIDIS/DY}} \propto \frac{
+  \sum_q e_q^2\, f_1^q \otimes f_{1T}^{\perp q} \otimes D_1^q}{
+  \sum_q e_q^2\, f_1^q \otimes f_1^q \otimes D_1^q},\qquad
+  f_{1T}^{\perp}(x,k_\perp) \ \text{Sivers TMD PDF}
+\end{equation}
+（\texttt{TMD\_SIDIS\_DY.py} 中 \texttt{fsiver}、\texttt{aut\_th\_up/down}、
+\texttt{aut\_DY\_up/down} 等函数）。与胶子 PDF 流水线物理无关，属独立研究主题。
+
+\subsection{辅助脚本}
+
+\begin{itemize}
+  \item \texttt{data\_chose.py} / \texttt{data\_chose\_for\_draw.py}：
+        比值拟合数据点选择（t\_sep/t\_ins 范围）；
+  \item \texttt{draw.py}：\texttt{plot\_fit\_results}、\texttt{plot\_c0\_vs\_z}、
+        \texttt{hR\_vs\_z} 等绘图；
+  \item \texttt{C\_pt\_load\_*.py}：不同数据来源（cor/GPD/dhxmean/sxmtest）的加载变体；
+  \item \texttt{fit\_zr\_a2all.py}、\texttt{fit\_hR\_big\_lambda\_new.py}、
+        \texttt{fit\_ratio\_FeynmenHellman\_new*.py}、\texttt{matching\_MPI.py}：
+        各步骤的并行/更新版本；
+  \item \texttt{test.py}、\texttt{test\_fit\_ratio.py}：测试脚本；
+  \item \texttt{submit/}：Slurm 提交模板。
+\end{itemize}
+
+% =====================================================================
+\section{Shell 脚本 -- 任务生成机制}
+
+\texttt{00\_contract/01\_submit/01\_create\_task/multi.sh} 用 sed 将模板占位符
+替换为逐组态参数（\texttt{multi.sh:44-50}）：
+\begin{verbatim}
+sed "s/=CONF=/$conf/g; s/=LATTICE_SIZE=/$conf_short/g; ..."
+\end{verbatim}
+生成 \texttt{02\_input/L24x72/<conf>/submit\_<conf>.sh}。各步骤 \texttt{submit.sh}
+为 Slurm 模板（分区/线程限制/venv 激活），\texttt{02\_ratio/submit.sh} 与
+根目录 \texttt{submit.sh} 结构一致。无物理内容，仅部署机制。
+
+% =====================================================================
+\section{代码-公式对照总表}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lll}
+\toprule
+代码位置 & 物理对象 & 公式 \\
+\midrule
+\texttt{Operator.py:9-39} & Levi-Civita & $\tfrac12\varepsilon_{ijkl}$ \\
+\texttt{Operator.py:48-74} & 方圈 & $P_{\mu\nu}=U_\mu U_\nu U_\mu^\dagger U_\nu^\dagger$ \\
+\texttt{Operator.py:77-160} & Clover $F_{\mu\nu}$ & $-\frac{i}{8}\sum(P-P^\dagger)$ \\
+\texttt{Operator.py:177-184} & 对偶场强 & $\tilde F=\tfrac12\varepsilon F$ \\
+\texttt{Operator.py:339-368} & 准分布算符 & $\mathrm{Tr}[F W \tilde F W^\dagger]$ \\
+\texttt{Calc\_ope\_unpol.py:74-90} & (μ,ν) 拆分 & $(\mu,\nu)\in\{(t,i),(t,j),(i,j)\}$ \\
+\texttt{2pt...gpu.py:102-105} & 宇称投影 & $\Gamma_\pm=\tfrac12(\gamma_0\pm\gamma_4)$ \\
+\texttt{2pt...gpu.py:244-318} & VVV & $\sum_x e^{-iP\cdot x}\varepsilon^{abc}V^aV^bV^c$ \\
+\texttt{2pt...gpu.py:366-387} & 质子 2pt 收缩 & $\mathrm{Tr}[\Gamma_+ M_{\rm wick}]$ \\
+\texttt{02\_ratio/code.py:286} & OPE 组合 & $-O_{ti}-O_{tj}+2O_{ij}$ \\
+\texttt{02\_ratio/code.py:327-333} & 断连 3pt & $\langle OC_2\rangle-\langle O\rangle\langle C_2\rangle$ \\
+\texttt{02\_ratio/code.py:354-360} & 谱模型 & $c_0+c_1e^{-\Delta E\tau}+c_1e^{-\Delta E(t-\tau)}$ \\
+\texttt{02\_ratio/code\_1.py:314-318} & cut 截断 & $\tau\in[\lfloor\frac{c}{2}\rfloor, t-\lceil\frac{c}{2}\rceil]$ \\
+\texttt{Calc\_3pt.py:187} & ±z 对称 & $(O(+z)-O(-z))/2$ \\
+\texttt{Fit\_Ratio.py:155-163} & 谱模型 & $A+B(e^{-\Delta E(t-\tau)}+e^{-\Delta E\tau})$ \\
+\texttt{04\_proton\_energy/code.py:225-231} & 2pt 两态 & $c_0e^{-E_0t}(1+c_1e^{-\Delta E t})$ \\
+\texttt{04\_proton\_energy/code.py:354} & 有效质量 & $\ln C(t)/C(t+1)\cdot\hbar c/a$ \\
+\texttt{analysis\_tools.py:118-152} & jackknife & $(N\bar x-x_k)/(N-1)$ \\
+\texttt{fit\_zr\_new.py:39-49} & $Z_{\overline{\rm MS}}$ & 一阶 $\alpha_s$ 匹配 \\
+\texttt{fit\_zr\_new.py:124-152} & $Z$ 格点拟合 & 幂律+对数+质量项 \\
+\texttt{fit\_hR\_big\_lambda.py:178-179} & 大 λ 外推 & $l_1\lambda^{-a_1}e^{-\lambda/\lambda_0}$ \\
+\texttt{matching.py:86-112} & LaMET 核 & $g_1,g_2,g_3,g_0$ \\
+\texttt{matching.py:122-126} & LO 反演 & $\tilde h=Z^{-1}\tilde h_0$ \\
+\texttt{fit\_pz\_a\_extrapolatiing.py:37} & 外推 & $a^2,P_z^{-1},m_\pi$ 幂次 \\
+\texttt{fit\_2pt.py:19-21} & 两态 2pt & $c_4e^{-E_0t}(1+c_5e^{-\Delta Et})$ \\
+\texttt{fit\_E0.py:25-27} & 色散 & $\sqrt{m^2+k_2P_z^2+k_3P_z^4a^2}$ \\
+\texttt{TMD\_SIDIS\_DY.py} & Sivers $A_{UT}$ & $\frac{f_{1T}^\perp\otimes f_1\otimes D_1}{f_1\otimes f_1\otimes D_1}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =====================================================================
+\section{关键代码片段}
+
+\subsection{Clover 场强（Operator.py:77-97，部分）}
+
+\lstinputlisting[firstline=77,lastline=97]{/root/lattice-pdf/examples/huangcl/00_contract/00_code/Operator.py}
+
+\subsection{非定域算符主循环（Operator.py:339-368）}
+
+\lstinputlisting[firstline=339,lastline=368]{/root/lattice-pdf/examples/huangcl/00_contract/00_code/Operator.py}
+
+\subsection{比值与断连减法（02\_ratio/code.py:326-345）}
+
+\lstinputlisting[firstline=326,lastline=345]{/root/lattice-pdf/examples/huangcl/02_ratio/code.py}
+
+\subsection{谱展开拟合模型（02\_ratio/code.py:354-360）}
+
+\lstinputlisting[firstline=354,lastline=360]{/root/lattice-pdf/examples/huangcl/02_ratio/code.py}
+
+\subsection{质子 2pt Wick 收缩（2pt...gpu.py:366-387）}
+
+\lstinputlisting[firstline=366,lastline=387]{/root/lattice-pdf/examples/huangcl/00_contract/00_code/2pt_proton_Cg5gmu_L32x64_mom2_xdir_gpu.py}
+
+\subsection{LaMET 匹配核（matching.py:86-126）}
+
+\lstinputlisting[firstline=86,lastline=126]{/root/lattice-pdf/examples/huangcl/99_ref_code/matching.py}
+
+% =====================================================================
+\section{参考源清单}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{llp{7.5cm}}
+\toprule
+参考源 & 类型 & 内容 \\
+\midrule
+\texttt{00\_contract/00\_code/Operator.py:9-39} & 代码 & Levi-Civita 张量 \\
+\texttt{00\_contract/00\_code/Operator.py:48-74} & 代码 & 方圈 $P_{\mu\nu}$ \\
+\texttt{00\_contract/00\_code/Operator.py:77-160} & 代码 & Clover 场强 \\
+\texttt{00\_contract/00\_code/Operator.py:177-184} & 代码 & 对偶场强 \\
+\texttt{00\_contract/00\_code/Operator.py:339-368} & 代码 & 非定域 OPE 算符 \\
+\texttt{00\_contract/00\_code/Calc\_ope\_unpol.py:74-90} & 代码 & MPI (μ,ν) 拆分 \\
+\texttt{00\_contract/00\_code/Calc\_ope\_unpol.py:122-133} & 代码 & z 循环与保存 \\
+\texttt{00\_contract/00\_code/2pt\_...\_gpu.py:102-105} & 代码 & 宇称投影 \\
+\texttt{00\_contract/00\_code/2pt\_...\_gpu.py:155-165} & 代码 & 动量相位 \\
+\texttt{00\_contract/00\_code/2pt\_...\_gpu.py:244-318} & 代码 & VVV 计算 \\
+\texttt{00\_contract/00\_code/2pt\_...\_gpu.py:366-387} & 代码 & Wick 收缩 \\
+\texttt{02\_ratio/code.py:286} & 代码 & OPE 组合系数 \\
+\texttt{02\_ratio/code.py:327-333} & 代码 & 断连 3pt 与比值 \\
+\texttt{02\_ratio/code.py:354-360} & 代码 & 谱展开模型 \\
+\texttt{02\_ratio/code.py:195-206} & 代码 & jackknife/boot 重采样 \\
+\texttt{02\_ratio/code.py:209-254} & 代码 & 协方差与 $\chi^2$ \\
+\texttt{02\_ratio/code\_1.py:314-318} & 代码 & cut 截断 \\
+\texttt{02\_ratio/code\_02\_ratio.py:209-261} & 代码 & 按轴 OPE \\
+\texttt{02\_ratio/code\_02\_ratio.py:265-368} & 代码 & 六方向比值 \\
+\texttt{02\_ratio/9\_others/Calc\_3pt.py:187} & 代码 & ±z 反对称组合 \\
+\texttt{02\_ratio/9\_others/Calc\_3pt.py:219-237} & 代码 & 断连 3pt 组装 \\
+\texttt{02\_ratio/9\_others/Fit\_Ratio.py:155-163} & 代码 & 谱模型 \\
+\texttt{04\_proton\_energy/code.py:102} & 代码 & $\hbar c/a$ 单位 \\
+\texttt{04\_proton\_energy/code.py:225-231} & 代码 & 2pt 两态模型 \\
+\texttt{04\_proton\_energy/code.py:354} & 代码 & 有效质量 \\
+\texttt{04\_proton\_energy/code\_proton\_energy.py:166-231} & 代码 & 三方向 corr2 \\
+\texttt{98\_tools/gamma\_matrix\_cupy\_DR.py:7-46} & 代码 & DR 基 γ \\
+\texttt{98\_tools/input\_output\_4\_cupy.py:39-81} & 代码 & perambulator IO \\
+\texttt{98\_tools/input\_output\_4\_cupy.py:339-370} & 代码 & V$^\dagger$UV 链 \\
+\texttt{98\_tools/analysis\_tools.py:118-152} & 代码 & 重采样 \\
+\texttt{99\_ref\_code/readme.txt} & 文档 & 历史流水线链条 \\
+\texttt{99\_ref\_code/fit\_ratio.py:32-42} & 代码 & 谱模型含 $e^{-\Delta Et}$ \\
+\texttt{99\_ref\_code/fit\_zr\_new.py:39-49} & 代码 & $Z_{\overline{\rm MS}}$ \\
+\texttt{99\_ref\_code/fit\_zr\_new.py:124-152} & 代码 & Z 拟合模型 \\
+\texttt{99\_ref\_code/fit\_hR\_big\_lambda.py:137-179} & 代码 & 大 λ 外推 \\
+\texttt{99\_ref\_code/matching.py:86-126} & 代码 & LaMET 核与反演 \\
+\texttt{99\_ref\_code/fit\_pz\_a\_extrapolatiing.py:37} & 代码 & 外推公式 \\
+\texttt{99\_ref\_code/fit\_2pt.py:19-21} & 代码 & 2pt 两态 \\
+\texttt{99\_ref\_code/fit\_E0.py:25-27} & 代码 & 色散关系 \\
+\texttt{99\_ref\_code/fit\_ratio\_FeynmenHellman.py:22-133} & 代码 & FH 比值提取 \\
+\texttt{99\_ref\_code/matching\_cc.py:53-69} & 代码 & cc 匹配核 \\
+\texttt{99\_ref\_code/TMD\_SIDIS\_DY.py} & 代码 & Sivers TMD \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =====================================================================
+\section{结论与局限}
+
+\subsection{结论}
+
+\begin{enumerate}[itemsep=2pt]
+  \item 流水线物理主线清晰：步骤 0 在 GPU 上实现
+        $\mathrm{Tr}[F_{\mu\nu}W\tilde F_{\mu'\nu'}W^\dagger]$ 非定域 OPE 算符与
+        蒸馏质子 2pt；步骤 2 组合 $(-O_{ti}-O_{tj}+2O_{ij})$ 构造非极化胶子
+        准分布，减断连图后作 $C_3^{\rm disc}/C_2$ 比值，用两态谱模型
+        $c_0+c_1e^{-\Delta E\tau}+c_1e^{-\Delta E(t-\tau)}$ 提取基态矩阵元
+        $c_0(z)$；步骤 4 用 $C_2(t)=c_0e^{-E_0t}(1+c_1e^{-\Delta Et})$ 提取质子
+        能量。
+  \item 历史流水线（99\_ref\_code）补全了 PDF 重建的后续步骤：
+        重整化（fit\_zr\_new）、大 λ 外推 + 傅里叶变换（fit\_hR\_big\_lambda）、
+        LaMET 匹配（matching.py）、$a^2$/$P_z$ 外推
+        （fit\_pz\_a\_extrapolatiing）。
+  \item 每段代码均可映射到明确的物理公式（见第 9 节对照表）。
+\end{enumerate}
+
+\subsection{局限}
+
+\begin{itemize}
+  \item 覆盖范围：54 个 .py 中约 40 个被逐文件分析；\texttt{99\_ref\_code} 内
+        多个变体（\texttt{fit\_hR\_big\_lambda\_new.py}、
+        \texttt{fit\_ratio\_FeynmenHellman\_new*.py}、\texttt{matching\_MPI.py}
+        等）仅按同类归并描述，未逐行展开；
+  \item \texttt{TMD\_SIDIS\_DY.py} 为 CRLF 行终止文件，部分工具无法直接 grep，
+        其公式映射基于函数名与整体结构；
+  \item 集群数据文件（\texttt{/public/...}）本机不可解析，公式与代码的对应
+        依据代码逻辑与物理推导，未与数值结果交叉验证；
+  \item \texttt{04\_proton\_energy/code.py} 中拟合用 \texttt{p0} 而非 prior，
+        \texttt{code.py} 用 prior —— 两套参数化并存，报告中已分别注明。
+\end{itemize}
+
+\end{document}

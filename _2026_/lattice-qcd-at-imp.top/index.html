@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Primary Meta Tags -->
+  <title>格点量子色动力学课题组 — 中国科学院近代物理研究所 | Lattice QCD Group at IMP, CAS</title>
+  <meta name="description" content="中国科学院近代物理研究所格点量子色动力学（Lattice QCD）课题组，由孙鹏研究员和刘柳明研究员带领，致力于强子结构、部分子分布函数、粲重子散射等方向的第一性原理计算研究。">
+  <meta name="keywords" content="格点QCD, 格点量子色动力学, Lattice QCD, 近代物理研究所, IMP, 孙鹏, 刘柳明, 部分子分布函数, 粲重子, 核子自旋, CLQCD">
+  <meta name="author" content="Lattice QCD Group, Institute of Modern Physics, CAS">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="格点QCD课题组 — IMP, CAS">
+  <meta property="og:title" content="格点量子色动力学课题组 — 中国科学院近代物理研究所">
+  <meta property="og:description" content="从第一性原理出发探索强相互作用的奥秘。">
+  <meta property="og:url" content="https://lattice-qcd-at-imp.top">
+  <meta property="og:image" content="static/images/social_preview.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="格点量子色动力学课题组 — IMP, CAS">
+  <meta name="twitter:description" content="从第一性原理出发探索强相互作用的奥秘。">
+  <meta name="twitter:image" content="static/images/social_preview.png">
+
+  <!-- Additional SEO -->
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <!-- Preconnect -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="custom/李政道手写%22格%22图.png">
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+  <link rel="preload" href="static/css/bulma-carousel.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" href="static/css/bulma-slider.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" href="static/css/fontawesome.all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript>
+    <link rel="stylesheet" href="static/css/bulma-carousel.min.css">
+    <link rel="stylesheet" href="static/css/bulma-slider.min.css">
+    <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  </noscript>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ResearchGroup",
+    "name": "Lattice QCD Research Group",
+    "description": "Lattice Quantum Chromodynamics research group at the Institute of Modern Physics, Chinese Academy of Sciences",
+    "parentOrganization": {
+      "@type": "Organization",
+      "name": "Institute of Modern Physics, Chinese Academy of Sciences",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Lanzhou",
+        "addressRegion": "Gansu",
+        "addressCountry": "CN"
+      }
+    },
+    "member": [
+      {
+        "@type": "Person",
+        "name": "Peng Sun",
+        "jobTitle": "Professor",
+        "email": "pengsun@impcas.ac.cn"
+      },
+      {
+        "@type": "Person",
+        "name": "Liuming Liu",
+        "jobTitle": "Professor",
+        "email": "liuming@impcas.ac.cn"
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+
+<!-- ===== Navigation ===== -->
+<nav id="main-navbar" role="navigation" aria-label="Main navigation">
+  <div class="navbar-brand">
+    <a href="#hero" class="navbar-logo" aria-label="Home">
+      <span class="navbar-logo-icon">Q</span>
+      <span>格点QCD课题组</span>
+    </a>
+  </div>
+
+  <button id="navbar-burger" class="navbar-burger" aria-label="Menu" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+
+  <div id="navbar-menu" class="navbar-menu">
+    <ul class="navbar-links">
+      <li><a href="#hero" class="navbar-item is-active" data-i18n="nav.home">首页</a></li>
+      <li><a href="#about" class="navbar-item" data-i18n="nav.about">关于我们</a></li>
+      <li><a href="#advisors" class="navbar-item" data-i18n="nav.advisors">导师</a></li>
+      <li><a href="#research" class="navbar-item" data-i18n="nav.research">研究方向</a></li>
+      <li><a href="#publications" class="navbar-item" data-i18n="nav.publications">论文</a></li>
+      <li><a href="#students" class="navbar-item" data-i18n="nav.students">研究生</a></li>
+      <li><a href="#conferences" class="navbar-item" data-i18n="nav.conferences">会议</a></li>
+      <li><a href="#summer-schools" class="navbar-item" data-i18n="nav.lectures">讲习班</a></li>
+      <li><a href="#software" class="navbar-item" data-i18n="nav.software">软件工作</a></li>
+      <li><a href="#gallery" class="navbar-item" data-i18n="nav.gallery">图库</a></li>
+      <li><a href="#help" class="navbar-item" data-i18n="nav.help">帮助反馈</a></li>
+    </ul>
+    <div class="navbar-actions">
+      <button id="search-toggle" class="nav-action-btn" aria-label="Search" title="搜索">
+        <i class="fas fa-search"></i>
+      </button>
+      <button id="theme-toggle" class="nav-action-btn" aria-label="Toggle dark mode" title="深色模式">
+        <i class="fas fa-moon"></i>
+      </button>
+      <button id="lang-toggle" class="nav-action-btn" aria-label="Switch language" title="English">EN</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== Hero Section ===== -->
+<section id="hero">
+  <canvas id="starfield-canvas" class="hero-canvas"></canvas>
+  <canvas id="sakura-canvas" class="hero-canvas"></canvas>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <h1 class="hero-title" data-i18n="hero.title">格点量子色动力学课题组</h1>
+    <p class="hero-subtitle" data-i18n="hero.subtitle">中国科学院近代物理研究所</p>
+    <div class="hero-cta">
+      <a href="#about" class="button button-primary">
+        <i class="fas fa-info-circle"></i>&ensp;<span data-i18n="nav.about">关于我们</span>
+      </a>
+      <a href="#publications" class="button button-outline">
+        <i class="fas fa-file-alt"></i>&ensp;<span data-i18n="nav.publications">论文</span>
+      </a>
+    </div>
+  </div>
+  <div class="hero-scroll-hint">
+    <span data-i18n="hero.scrollHint">向下滚动了解更多</span>
+    <i class="fas fa-chevron-down"></i>
+  </div>
+</section>
+
+<!-- ===== About Section ===== -->
+<section id="about" class="section reveal">
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="about.title">关于我们</h2>
+  </div>
+  <div class="about-content">
+    <div class="about-grid">
+      <div class="about-text">
+        <p data-i18n="about.intro1">中国科学院近代物理研究所（IMP）创建于1957年，是一个依托大科学装置，开展重离子科学与技术、加速器驱动先进核能系统研究的基地型研究所。研究所围绕国家重大战略需求，开展重离子物理前沿研究，是国内重离子物理研究的中心。</p>
+        <p data-i18n="about.intro2">格点量子色动力学（Lattice QCD）是从第一性原理出发研究强相互作用的重要理论工具。通过将时空离散化为四维格点，在大规模并行计算机上进行数值模拟，可以从量子色动力学（QCD）拉格朗日量直接计算强子的质量、结构和相互作用等物理量。</p>
+        <p data-i18n="about.lee">李政道先生与格点量子色动力学有着深厚的渊源。他大力推动了中国格点QCD研究的发展，并提出了基于芯片的格点QCD计算方案，为在有限资源条件下进行格点模拟开辟了新思路。</p>
+      </div>
+      <div class="about-image">
+        <img src="custom/标准模型图.webp" alt="标准模型图示" loading="lazy">
+      </div>
+    </div>
+
+    <div class="about-images-row reveal-up">
+      <div class="about-image-card">
+        <img src="custom/李政道坐像.jpg" alt="李政道先生坐像" loading="lazy">
+        <span class="about-image-caption" data-i18n="about.leePhoto">李政道先生 (Prof. T.D. Lee)</span>
+      </div>
+      <div class="about-image-card">
+        <img src="custom/课题组合照20260706.jpg" alt="课题组合照" loading="lazy">
+        <span class="about-image-caption" data-i18n="about.groupPhoto">课题组合照 (Group Photo, 2026)</span>
+      </div>
+    </div>
+
+    <div class="about-images-row about-images-row-single reveal-up">
+      <div class="about-image-card">
+        <img src="custom/课题组聚餐20260711.jpg" alt="课题组聚餐" loading="lazy">
+        <span class="about-image-caption" data-i18n="about.dinnerPhoto">课题组聚餐 (Group Dinner, 2026)</span>
+      </div>
+    </div>
+
+    <div class="about-pdf-link reveal-up">
+      <a href="custom/李政道先生与芯片上的格点量子色动力学.pdf" target="_blank" class="pdf-download-btn">
+        <i class="fas fa-file-pdf"></i>&ensp;<span data-i18n="about.leePdf">李政道先生与芯片上的格点量子色动力学 (PDF)</span>
+        <i class="fas fa-external-link-alt"></i>
+      </a>
+    </div>
+
+    <div class="about-stats reveal-up">
+      <div class="stat-card">
+        <div class="stat-number counter" data-target="146">0</div>
+        <div class="stat-label" data-i18n="about.stats.papers">发表论文</div>
+        <div class="stat-note" data-i18n="about.stats.papersNote" style="font-size:0.7rem;color:var(--text-light);margin-top:0.25rem;">（第一/通讯作者）</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number counter" data-target="2548">0</div>
+        <div class="stat-label" data-i18n="about.stats.citations">累计引用</div>
+        <div class="stat-note" data-i18n="about.stats.citationsNote" style="font-size:0.7rem;color:var(--text-light);margin-top:0.25rem;">（第一/通讯作者）</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number counter" data-target="8">0</div>
+        <div class="stat-label" data-i18n="about.stats.students">培养研究生</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number counter" data-target="14">0</div>
+        <div class="stat-label" data-i18n="about.stats.years">研究年限</div>
+      </div>
+    </div>
+
+    <!-- About Horizontal Scroll Gallery -->
+    <div class="about-gallery reveal-up">
+      <h3 class="about-gallery-title" data-i18n="about.slideshow">课题组掠影</h3>
+      <div class="about-scroll-container" id="about-scroll">
+        <div class="about-scroll-track">
+          <div class="about-scroll-item"><img src="custom/孙鹏讲习图.webp" alt="孙鹏讲习图" loading="lazy"></div>
+          <div class="about-scroll-item"><img src="custom/刘柳明讲习图.webp" alt="刘柳明讲习图" loading="lazy"></div>
+          <div class="about-scroll-item"><img src="custom/张鑫讲习图.webp" alt="张鑫讲习图" loading="lazy"></div>
+          <div class="about-scroll-item"><img src="custom/近代物理研究所惠州分部办公楼.jpg" alt="近代物理研究所惠州分部" loading="lazy"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Advisors Section ===== -->
+<section id="advisors" class="section section-alt reveal">
+  <div class="section-bg-overlay"></div>
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="advisors.title">导师简介</h2>
+  </div>
+  <div class="advisors-grid">
+    <!-- Sun Peng -->
+    <div class="advisor-card tilt-card reveal-left">
+      <img src="custom/孙鹏头像.webp" alt="Peng Sun" class="advisor-avatar" loading="lazy">
+      <h3 class="advisor-name" data-i18n="advisors.sun.name">孙鹏</h3>
+      <div class="advisor-role" data-i18n="advisors.sun.title_role">研究员、博士生导师</div>
+      <p class="advisor-bio" data-i18n="advisors.sun.bio">孙鹏，男，中国科学院近代物理研究所研究员、博士生导师。2010年于中国科学院研究生院获博士学位，先后在北京大学、美国劳伦斯伯克利国家实验室、密西根州立大学从事博士后研究，2018年任南京师范大学教授，2022年起任现职。研究领域为理论物理、格点量子色动力学、粒子物理与核子结构。已发表论文48篇，其中5篇Phys. Rev. Lett.，总引用2000余次。</p>
+      <div class="advisor-tags">
+        <span class="advisor-tag">格点QCD</span>
+        <span class="advisor-tag">核子结构</span>
+        <span class="advisor-tag">部分子分布函数</span>
+      </div>
+      <div class="advisor-links">
+        <a href="https://people.ucas.ac.cn/~sunpengimp" target="_blank" class="advisor-link"><i class="fas fa-user"></i><span data-i18n="advisors.homepage">个人主页</span></a>
+        <a href="https://inspirehep.net/authors/1659207" target="_blank" class="advisor-link"><i class="ai ai-inspire"></i><span data-i18n="advisors.inspire">INSPIRE-HEP</span></a>
+      </div>
+      <div class="advisor-email-row">
+        <a href="mailto:pengsun@impcas.ac.cn" class="advisor-link"><i class="fas fa-envelope"></i>pengsun@impcas.ac.cn</a>
+      </div>
+    </div>
+
+    <!-- Liu Liuming -->
+    <div class="advisor-card tilt-card reveal-right">
+      <img src="custom/刘柳明头像.webp" alt="Liuming Liu" class="advisor-avatar" loading="lazy">
+      <h3 class="advisor-name" data-i18n="advisors.liu.name">刘柳明</h3>
+      <div class="advisor-role" data-i18n="advisors.liu.title_role">研究员、博士生导师</div>
+      <p class="advisor-bio" data-i18n="advisors.liu.bio">刘柳明，女，中国科学院近代物理研究所研究员、博士生导师。2005–2010年于美国威廉玛丽学院获博士学位，先后在爱尔兰都柏林圣三一学院、德国波恩大学从事博士后研究，2017年起任现职。研究领域为格点规范场论、强子谱学与强子物理。在Phys. Rev. D、JHEP、Chinese Physics C等国际知名期刊发表多篇论文。</p>
+      <div class="advisor-tags">
+        <span class="advisor-tag">格点规范场论</span>
+        <span class="advisor-tag">强子谱学</span>
+        <span class="advisor-tag">强子物理</span>
+      </div>
+      <div class="advisor-links">
+        <a href="https://people.ucas.ac.cn/~liuliuming" target="_blank" class="advisor-link"><i class="fas fa-user"></i><span data-i18n="advisors.homepage">个人主页</span></a>
+        <a href="https://inspirehep.net/authors/1259106" target="_blank" class="advisor-link"><i class="ai ai-inspire"></i><span data-i18n="advisors.inspire">INSPIRE-HEP</span></a>
+      </div>
+      <div class="advisor-email-row">
+        <a href="mailto:liuming@impcas.ac.cn" class="advisor-link"><i class="fas fa-envelope"></i>liuming@impcas.ac.cn</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Research Areas Section ===== -->
+<section id="research" class="section reveal">
+  <div class="section-bg-overlay"></div>
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="research.title">研究方向</h2>
+  </div>
+  <div class="research-grid">
+    <div class="research-card reveal-child">
+      <div class="research-icon"><i class="fas fa-atom"></i></div>
+      <h4 class="research-card-title" data-i18n="research.area1.title">粲重子散射</h4>
+      <p class="research-card-desc" data-i18n="research.area1.desc">利用格点QCD从第一性原理计算粲重子（如Λc）之间的低能散射参数，包括散射长度和有效力程，为理解强相互作用中的重味强子动力学提供理论输入。</p>
+    </div>
+    <div class="research-card reveal-child">
+      <div class="research-icon"><i class="fas fa-wave-square"></i></div>
+      <h4 class="research-card-title" data-i18n="research.area2.title">部分子分布函数</h4>
+      <p class="research-card-desc" data-i18n="research.area2.desc">在大动量有效理论（LaMET）框架下，通过格点QCD计算核子和原子核的部分子分布函数（PDF），为高能物理实验中的强子结构研究提供非微扰理论预言。</p>
+    </div>
+    <div class="research-card reveal-child">
+      <div class="research-icon"><i class="fas fa-magnet"></i></div>
+      <h4 class="research-card-title" data-i18n="research.area3.title">核子自旋结构</h4>
+      <p class="research-card-desc" data-i18n="research.area3.desc">研究核子内部夸克和胶子对自旋的贡献，包括夸克自旋、胶子自旋和轨道角动量，解决困扰物理学界多年的"质子自旋危机"问题。</p>
+    </div>
+    <div class="research-card reveal-child">
+      <div class="research-icon"><i class="fas fa-microchip"></i></div>
+      <h4 class="research-card-title" data-i18n="research.area4.title">格点QCD算法</h4>
+      <p class="research-card-desc" data-i18n="research.area4.desc">发展高效的格点QCD数值算法和大规模并行计算技术，包括蒸馏技术（distillation）、域墙费米子算法等，提高计算精度和效率。</p>
+    </div>
+    <div class="research-card reveal-child">
+      <div class="research-icon"><i class="fas fa-circle-nodes"></i></div>
+      <h4 class="research-card-title" data-i18n="research.area5.title">核效应</h4>
+      <p class="research-card-desc" data-i18n="research.area5.desc">研究原子核环境对核子内部结构的修正效应（EMC效应），通过格点QCD从夸克和胶子自由度理解核介质中部分子分布的变化。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Publications Section ===== -->
+<section id="publications" class="section section-alt reveal">
+  <div class="section-bg-overlay"></div>
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="publications.title">论文发表</h2>
+    <p class="section-subtitle" data-i18n="publications.filterNote">（展示列表：第一单位 Lanzhou, Inst. Modern Phys. | 计数：第一/通讯作者，不限单位）</p>
+  </div>
+  <div class="pub-controls">
+    <input type="text" id="pub-search" data-i18n-placeholder="publications.search" placeholder="搜索论文...">
+  </div>
+  <div id="publications-list" class="publications-list"></div>
+  <div id="pub-offline-badge" class="pub-offline-badge" style="display:none;">
+    <i class="fas fa-database"></i>&ensp;<span data-i18n="publications.offlineData">离线数据</span>
+  </div>
+  <p id="pub-no-results" class="pub-no-results" style="display:none;" data-i18n="publications.noResults">未找到相关论文</p>
+  <button id="pub-load-more" class="pub-load-more" style="display:none;" data-i18n="publications.loadMore">加载更多</button>
+</section>
+
+<!-- ===== Students Section ===== -->
+<section id="students" class="section reveal">
+  <div class="section-bg-overlay"></div>
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="students.title">研究生</h2>
+    <p class="section-subtitle" data-i18n="students.fromPapers">（数据来源于INSPIRE-HEP论文作者分析）</p>
+  </div>
+  <div id="students-grid" class="students-grid"></div>
+  <p class="student-placeholder" data-i18n="students.placeholder">更多研究生信息收集中，如有遗漏请与我们联系。</p>
+</section>
+
+<!-- ===== Conferences Section ===== -->
+<section id="conferences" class="section section-alt reveal">
+  <div class="section-bg-overlay"></div>
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="conferences.title">学术会议</h2>
+  </div>
+  <div id="conferences-timeline" class="timeline"></div>
+</section>
+
+<!-- ===== Lectures Section ===== -->
+<section id="summer-schools" class="section reveal">
+  <div class="section-bg-overlay"></div>
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="lectures.title">讲习班</h2>
+    <p class="section-subtitle" data-i18n="lectures.recommend">以下为推荐研究生参加的讲习班：</p>
+  </div>
+  <div id="summer-schools-grid" class="summer-schools-grid"></div>
+</section>
+
+<!-- ===== Software Work Section ===== -->
+<section id="software" class="section section-alt reveal">
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="software.title">软件工作</h2>
+    <p class="section-subtitle" data-i18n="software.subtitle">课题组开发的格点QCD相关软件工具</p>
+  </div>
+  <div class="software-grid">
+    <!-- PyQCU Card -->
+    <div class="software-card reveal-child">
+      <div class="software-icon"><i class="fas fa-microchip"></i></div>
+      <h3 class="software-name">PyQCU</h3>
+      <p class="software-desc" data-i18n="software.pyqcu.desc">基于CUDA C++与Python的高性能格点QCD并行计算软件包，支持多计算平台且具有较强的易用性。</p>
+      <div class="software-links">
+        <a href="https://gitee.com/zhangxin8069/PyQCU" target="_blank" class="software-link-btn">
+          <i class="fas fa-code-branch"></i>&ensp;<span data-i18n="software.viewRepo">查看仓库 (Gitee)</span>
+        </a>
+      </div>
+    </div>
+    <!-- Test Report Card -->
+    <div class="software-card reveal-child">
+      <div class="software-icon"><i class="fas fa-file-alt"></i></div>
+      <h3 class="software-name" data-i18n="software.testReport.title">PyQCU 应用测试报告</h3>
+      <p class="software-desc" data-i18n="software.testReport.desc">508应用测试报告，验证PyQCU在格点QCD计算中的正确性与性能。</p>
+      <div class="software-links">
+        <a href="custom/张鑫 508应用测试报告-PyQCU.pdf" target="_blank" class="software-link-btn">
+          <i class="fas fa-file-pdf"></i>&ensp;<span data-i18n="software.viewPdf">查看PDF</span>
+        </a>
+      </div>
+    </div>
+    <!-- Gitee Contributions Card -->
+    <div class="software-card reveal-child">
+      <div class="software-icon"><i class="fas fa-chart-line"></i></div>
+      <h3 class="software-name" data-i18n="software.gitee.title">Gitee 贡献度</h3>
+      <p class="software-desc" data-i18n="software.gitee.desc">张鑫在Gitee平台上的代码贡献统计（截至2026年7月）。</p>
+      <div class="software-contrib-img">
+        <img src="custom/张鑫 20260706gitee贡献度.png" alt="Gitee贡献度" loading="lazy" class="clickable-img">
+      </div>
+    </div>
+  </div>
+
+  <!-- Work Reports Slideshow -->
+  <div class="work-reports-section reveal-up">
+    <h3 class="work-reports-title" data-i18n="software.workReports.title">工作汇报幻灯片</h3>
+    <div class="slideshow-container" id="work-reports-slideshow">
+      <div class="slides-wrapper" id="slides-wrapper">
+        <div class="slide"><img src="custom/张鑫 20251227工作汇报_01.jpg" alt="工作汇报 01" loading="lazy"></div>
+        <div class="slide"><img src="custom/张鑫 20251227工作汇报_02.jpg" alt="工作汇报 02" loading="lazy"></div>
+        <div class="slide"><img src="custom/张鑫 20251227工作汇报_03.jpg" alt="工作汇报 03" loading="lazy"></div>
+        <div class="slide"><img src="custom/张鑫 20251227工作汇报_04.jpg" alt="工作汇报 04" loading="lazy"></div>
+        <div class="slide"><img src="custom/张鑫 20251227工作汇报_05.jpg" alt="工作汇报 05" loading="lazy"></div>
+        <div class="slide"><img src="custom/张鑫 20251227工作汇报_06.jpg" alt="工作汇报 06" loading="lazy"></div>
+        <div class="slide"><img src="custom/张鑫 20251227工作汇报_07.jpg" alt="工作汇报 07" loading="lazy"></div>
+        <div class="slide"><img src="custom/张鑫 20251227工作汇报_08.jpg" alt="工作汇报 08" loading="lazy"></div>
+        <div class="slide"><img src="custom/张鑫 20260531工作汇报_01.jpg" alt="工作汇报 20260531" loading="lazy"></div>
+      </div>
+      <button class="slide-btn slide-prev" id="slide-prev" aria-label="Previous slide"><i class="fas fa-chevron-left"></i></button>
+      <button class="slide-btn slide-next" id="slide-next" aria-label="Next slide"><i class="fas fa-chevron-right"></i></button>
+      <div class="slide-dots" id="slide-dots"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Gallery Section ===== -->
+<section id="gallery" class="section section-alt reveal">
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="gallery.title">图库</h2>
+  </div>
+  <div class="gallery-grid" id="gallery-grid"></div>
+</section>
+
+<!-- ===== Help & Feedback Section ===== -->
+<section id="help" class="section reveal section-bg-img" style="background-image: url('custom/QCD涨落图.gif');">
+  <div class="section-bg-overlay"></div>
+  <div class="section-header">
+    <h2 class="section-title" data-i18n="help.title">帮助反馈</h2>
+    <p class="section-subtitle" data-i18n="help.subtitle">如有任何问题或建议，欢迎联系我们</p>
+  </div>
+  <div class="help-content">
+    <div class="help-card reveal-child">
+      <div class="help-admin-img">
+        <img src="custom/网站管理员.webp" alt="网站管理员" loading="lazy">
+      </div>
+      <div class="help-info">
+        <h3 class="help-name" data-i18n="help.admin">网站管理员</h3>
+        <p class="help-role" data-i18n="help.adminRole">技术支持与内容维护</p>
+        <a href="mailto:zhangxin8069@qq.com" class="help-email-link">
+          <i class="fas fa-envelope"></i>&ensp;zhangxin8069@qq.com
+        </a>
+        <p class="help-note" data-i18n="help.note">如需更新网站内容、报告问题或提供建议，请发送邮件至以上地址。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Footer ===== -->
+<footer class="footer" id="contact">
+  <div class="footer-grid">
+    <div>
+      <h4 class="footer-title" data-i18n="footer.contact">联系我们</h4>
+      <p class="footer-text" data-i18n="footer.institution">中国科学院近代物理研究所</p>
+      <p class="footer-text" data-i18n="footer.address">甘肃省兰州市城关区南昌路509号</p>
+      <p class="footer-text">
+        <a href="mailto:pengsun@impcas.ac.cn" style="color: var(--primary-color);">pengsun@impcas.ac.cn</a><br>
+        <a href="mailto:liuming@impcas.ac.cn" style="color: var(--primary-color);">liuming@impcas.ac.cn</a>
+      </p>
+    </div>
+    <div>
+      <h4 class="footer-title" data-i18n="footer.links">相关链接</h4>
+      <ul class="footer-links">
+        <li><a href="https://inspirehep.net/authors/1659207" target="_blank"><i class="ai ai-inspire"></i> <span data-i18n="footer.inspireSun">孙鹏 @ INSPIRE-HEP</span></a></li>
+        <li><a href="https://inspirehep.net/authors/1259106" target="_blank"><i class="ai ai-inspire"></i> <span data-i18n="footer.inspireLiu">刘柳明 @ INSPIRE-HEP</span></a></li>
+        <li><a href="http://www.impcas.ac.cn/" target="_blank"><i class="fas fa-globe"></i> <span data-i18n="footer.imp">中国科学院近代物理研究所</span></a></li>
+        <li><a href="https://indico.itp.ac.cn/event/324/" target="_blank"><i class="fas fa-users"></i> <span data-i18n="footer.clqcd">CLQCD 研讨会</span></a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="footer-title" data-i18n="footer.collaborations">合作单位</h4>
+      <p class="footer-text" data-i18n="footer.collab1">中国格点量子色动力学合作组 (CLQCD)</p>
+      <p class="footer-text" data-i18n="footer.collab2">Lattice Parton Collaboration (LPC)</p>
+      <p class="footer-text" data-i18n="footer.collab3">南方核科学计算中心</p>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p data-i18n="footer.copyright">© 2026 格点QCD课题组. All rights reserved.</p>
+    <p style="margin-top:0.5rem;font-size:0.8rem;">Built with <a href="https://bulma.io" target="_blank">Bulma</a> | Inspired by <a href="https://nerfies.github.io" target="_blank">Nerfies</a> | <a href="https://web-animations.github.io/web-animations-demos/#starfield/starfield-indiv.html" target="_blank">Animations</a></p>
+    <p style="margin-top:0.3rem;font-size:0.75rem;color:var(--text-light);">
+      <a href="数据.csv" target="_blank" style="color:var(--text-light);">📊 数据汇总 (CSV)</a> |
+      <a href="https://github.com/zhangxin8069/lattice-qcd-at-imp.top" target="_blank" style="color:var(--text-light);">📁 GitHub</a>
+    </p>
+  </div>
+</footer>
+
+<!-- ===== Lightbox ===== -->
+<div id="lightbox" class="lightbox" aria-label="Image preview" role="dialog">
+  <button class="lightbox-close" aria-label="Close preview">&times;</button>
+  <img id="lightbox-img" src="" alt="Preview">
+</div>
+
+<!-- ===== Global Search Modal ===== -->
+<div id="search-modal" class="search-modal" aria-hidden="true">
+  <div class="search-backdrop"></div>
+  <div class="search-dialog">
+    <div class="search-input-wrapper">
+      <i class="fas fa-search search-input-icon"></i>
+      <input type="text" id="search-input" class="search-input" data-i18n-placeholder="search.placeholder" placeholder="搜索网站内容..." autocomplete="off">
+      <button id="search-close" class="search-close-btn" aria-label="Close search">&times;</button>
+    </div>
+    <div id="search-results" class="search-results">
+      <p class="search-hint" data-i18n="search.hint">输入关键词搜索导师、论文、研究方向、会议等内容</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Music Player Container ===== -->
+<div id="music-player-container"></div>
+
+<!-- ===== Scroll to Top ===== -->
+<button class="scroll-to-top" onclick="scrollToTop()" title="Scroll to top" aria-label="Scroll to top">
+  <i class="fas fa-chevron-up"></i>
+</button>
+
+<!-- ===== Scripts ===== -->
+<script defer src="static/js/fontawesome-subset.js"></script>
+<script defer src="static/js/bulma-carousel.min.js"></script>
+<script defer src="static/js/bulma-slider.min.js"></script>
+<script defer src="static/js/i18n.js"></script>
+<script defer src="static/js/theme.js"></script>
+<script defer src="static/js/music.js"></script>
+<script defer src="static/js/papers.js"></script>
+<script defer src="static/js/animations.js"></script>
+<script defer src="static/js/index.js"></script>
+
+</body>
+</html>

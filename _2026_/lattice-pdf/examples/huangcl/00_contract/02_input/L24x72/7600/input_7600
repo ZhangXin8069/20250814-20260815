@@ -1,0 +1,11 @@
+Nt 72
+Nx 24
+conf_id 7600
+delta_z 24
+link_dir z
+conf_file /public/group/lqcd/donghx/Hpysmear_beta6.20_mu-0.2770_ms-0.2400_L24x72/hpy_4D_10times_new/beta6.20_mu-0.2770_ms-0.2400_L24x72_cfg_7600.lime.contents/msg02.rec04.ildg-binary-data
+output_dir /public/home/huangcl/04_gluon_unpolarized_PDF/00_contract/01_submit/01_create_task/../../04_test_result/L24x72/7600
+# 24x72: beta6.20_mu-0.2770_ms-0.2400_L24x72    a=0.1053
+# 32x96: beta6.41_mu-0.2295_ms-0.2050_L32x96    a=0.08
+# output_dir /public/group/lqcd/donghx/Ope_Gluon/Result_hpy_4D_10times_xy/$5
+# pla_dir /public/group/lqcd/donghx/Ope_Gluon/Result_hpy_4D_10times/${5}/zdir/${3}
