@@ -1,0 +1,1121 @@
+\documentclass[11pt,a4paper]{ctexart}
+
+% ── Packages ──────────────────────────────────────────────────
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{physics}
+\usepackage{braket}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows,shapes,decorations.pathmorphing,decorations.markings}
+\geometry{margin=2.5cm}
+
+% ── Code highlighting ──────────────────────────────────────────
+\lstdefinestyle{python}{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{red!70!black},
+  numbers=left, numberstyle=\tiny\color{gray},
+  frame=single, breaklines=true,
+  tabsize=2, showstringspaces=false,
+  backgroundcolor=\color{gray!5},
+}
+\lstdefinestyle{bash}{
+  language=bash,
+  basicstyle=\ttfamily\small,
+  frame=single, breaklines=true,
+  backgroundcolor=\color{gray!5},
+}
+\lstdefinestyle{einsum}{
+  basicstyle=\ttfamily\small\color{blue!60!black},
+  frame=single,
+}
+
+% ── Theorem environments ────────────────────────────────────────
+\newtheorem{definition}{定义}[section]
+\newtheorem{theorem}{定理}[section]
+\newtheorem{algorithm}{算法}[section]
+
+% ── Custom boxes ────────────────────────────────────────────────
+\newtcolorbox{physicsbox}[1][]{colback=blue!3,colframe=blue!50!black,fonttitle=\bfseries,title=#1}
+\newtcolorbox{codebox}[1][]{colback=green!3,colframe=green!50!black,fonttitle=\bfseries,title=#1}
+
+\title{\Huge \textbf{lqcddb} 包物理逻辑与代码逻辑解析\\
+\large ——格点QCD蒸馏关联函数计算与统计分析工具包}
+\author{基于 \texttt{/root/lattice-pdf/examples/sush/lqcddb/} 源码分析\\
+参考：\texttt{/root/lattice-pdf/docs/} 与 \texttt{/root/lattice-pdf/books/}}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% =================================================================
+\section{物理基础：格点QCD中的蒸馏方法}
+% =================================================================
+
+\subsection{欧几里得关联函数}
+
+格点QCD在四维欧几里得时空中计算强子关联函数。对于强子算符 $O(\vec{x},t)$，零动量投影的两点关联函数为：
+
+\begin{physicsbox}[两点关联函数定义]
+\begin{equation}
+C_{2\mathrm{pt}}(t) = \sum_{\vec{x}} \braket{\Omega | O(\vec{x}, t) \, O^{\dagger}(\vec{0}, 0) | \Omega}
+= \braket{\Omega | O(t) \, O^{\dagger}(0) | \Omega}
+\end{equation}
+在大时间分离极限下，$C_{2\mathrm{pt}}(t) \propto e^{-E_0 t}$，其中$E_0$为基态能量。
+\end{physicsbox}
+
+类似地，三点关联函数涉及流算符$J(\vec{x},\tau)$的插入：
+
+\begin{physicsbox}[三点关联函数]
+\begin{equation}
+C_{3\mathrm{pt}}(t_{\mathrm{sep}}, \tau) = \sum_{\vec{x},\vec{y}}
+\braket{\Omega | O_f(\vec{x}, t_{\mathrm{sep}}) \, J(\vec{y}, \tau) \, O_i^{\dagger}(\vec{0}, 0) | \Omega}
+\end{equation}
+其中$t_{\mathrm{sep}}$为源-汇分离，$\tau$为流插入时间。在大时间极限下提取矩阵元$\braket{f|J|i}$。
+\end{physicsbox}
+
+\subsection{蒸馏（Distillation）方法}
+
+蒸馏方法 \cite{Peardon:2009gh} 的核心思想是用拉普拉斯算符的低模本征矢量构造一个垂直于高能模式的投影算符。对于三维空间拉普拉斯算符：
+
+\begin{physicsbox}[蒸馏投影算符]
+\begin{equation}
+-\nabla^2_{xy}(t) = 6\delta_{xy} - \sum_{j=1}^{3} \left( U_j(x,t)\delta_{x+\hat{j},y} + U_j^{\dagger}(x-\hat{j},t)\delta_{x-\hat{j},y} \right)
+\end{equation}
+求解本征值问题 $-\nabla^2(t) \, \xi^{(k)}(t) = \lambda^{(k)}(t) \, \xi^{(k)}(t)$，取前$N_{\mathrm{ev}}$个本征矢量构造投影算符：
+\begin{equation}
+\square_{xy}(t) = \sum_{k=1}^{N_{\mathrm{ev}}} \xi^{(k)}_x(t) \, \xi^{(k)\dagger}_y(t)
+\end{equation}
+\end{physicsbox}
+
+蒸馏后的夸克传播子（perambulator）为：
+\begin{equation}
+\tau^{(t_{\mathrm{sink}}, t_{\mathrm{src}})}_{\alpha\beta, kl}
+= \xi^{(k)\dagger}(t_{\mathrm{sink}}) \, D^{-1}_{\alpha\beta}(t_{\mathrm{sink}}, t_{\mathrm{src}}) \, \xi^{(l)}(t_{\mathrm{src}})
+\end{equation}
+其中$D^{-1}$为Dirac算符的逆（夸克传播子），$\alpha,\beta$为Dirac指标，$k,l$为本征矢量指标。
+
+蒸馏方法的优势在于：
+\begin{enumerate}
+\item \textbf{维度压缩}：将$12V \times 12V$的Dirac矩阵压缩为$4N_{\mathrm{ev}} \times 4N_{\mathrm{ev}}$的perambulator矩阵
+\item \textbf{算符构造灵活}：任意强子插值算符可事后构造，无需重新求逆
+\item \textbf{动量投影高效}：通过本征矢量的相因子投影实现任意动量的关联函数
+\end{enumerate}
+
+\subsection{Wick收缩与费米子符号}
+
+对于给定的初态和末态强子算符，关联函数的计算归结为对所有可能的Wick收缩求和。每个收缩图对应一个特定的费米子配对方式，其振幅由perambulator、顶角函数和$\gamma$矩阵的张量收缩给出。
+
+费米子反对称性导致每个Wick收缩带有一个符号$(-1)^P$，其中$P$为将夸克场排列成收缩对所需的置换奇偶性。
+
+\begin{physicsbox}[Wick定理应用于强子关联函数]
+对于重子算符（如质子 $O = \epsilon^{abc} (u^a C\gamma_5 d^b) u^c$），关联函数展开为：
+\begin{equation}
+\braket{O(t) O^{\dagger}(0)} = \sum_{\sigma \in S_3 \times S_3} \mathrm{sgn}(\sigma) \;
+\prod_{f} \mathrm{Tr}\big[ \Gamma_{\sigma} \, \tau_f \, \Gamma'_{\sigma} \, \tau_f^{\dagger} \big]
+\end{equation}
+其中$S_3$为三夸克置换群，$\Gamma$表示$\gamma$矩阵结构。
+\end{physicsbox}
+
+\subsection{顶角函数：VVV与VDV}
+
+在蒸馏框架中，强子算符中的色指标收缩通过本征矢量的组合实现：
+
+\begin{physicsbox}[三夸克顶角 VVV]
+对于重子算符 $\epsilon^{abc} q^a q^b q^c$，三夸克顶角为：
+\begin{equation}
+\mathrm{VVV}_{klm}(\vec{p}, t) = \epsilon^{abc} \sum_{\vec{x}} e^{-i\vec{p}\cdot\vec{x}} \;
+\xi^{(k)a}_{\vec{x}}(t) \; \xi^{(l)b}_{\vec{x}}(t) \; \xi^{(m)c}_{\vec{x}}(t)
+\end{equation}
+\end{physicsbox}
+
+\begin{physicsbox}[夸克-反夸克顶角 VDV]
+对于介子算符 $\bar{q} \Gamma q$（或重子中的双夸克对），VDV顶角为：
+\begin{equation}
+\mathrm{VDV}_{kl}(\vec{p}, t) = \sum_{\vec{x}} e^{-i\vec{p}\cdot\vec{x}} \;
+\xi^{(k)\dagger a}_{\vec{x}}(t) \; \xi^{(l)a}_{\vec{x}}(t)
+\end{equation}
+可以扩展为包含规范链接的版本：
+\begin{equation}
+\mathrm{VDV}_{kl}(\vec{p}, \Delta\vec{x}, t) = \sum_{\vec{x}} e^{-i\vec{p}\cdot\vec{x}} \;
+\xi^{(k)\dagger a}_{\vec{x}}(t) \; U^{ab}(\vec{x}, \vec{x}+\Delta\vec{x}) \; \xi^{(l)b}_{\vec{x}+\Delta\vec{x}}(t)
+\end{equation}
+\end{physicsbox}
+
+\subsection{有效质量与Jackknife分析}
+
+从两点关联函数提取能谱的标准方法：
+
+\begin{physicsbox}[有效质量]
+\begin{align}
+E_{\mathrm{eff}}^{\mathrm{log}}(t) &= \frac{1}{a} \ln\left[ \frac{C_{2\mathrm{pt}}(t)}{C_{2\mathrm{pt}}(t+1)} \right] \\
+E_{\mathrm{eff}}^{\mathrm{cosh}}(t) &= \frac{1}{a} \operatorname{arccosh}\left[ \frac{C_{2\mathrm{pt}}(t+2) + C_{2\mathrm{pt}}(t)}{2 C_{2\mathrm{pt}}(t+1)} \right]
+\end{align}
+其中$a$为格距，$E_{\mathrm{eff}}(t) \to E_0$当$t \to \infty$（基态平台区）。
+\end{physicsbox}
+
+Jackknife重采样用于估计统计误差。对$N$个组态，第$k$个Jackknife样本是去掉第$k$个组态后其余$N-1$个组态的均值：
+\begin{equation}
+\bar{x}_{(k)} = \frac{1}{N-1} \sum_{i \neq k} x_i, \quad
+\sigma_{\mathrm{jk}} = \sqrt{\frac{N-1}{N} \sum_{k=1}^{N} (\bar{x}_{(k)} - \bar{x})^2}
+\end{equation}
+
+% =================================================================
+\section{lqcddb 代码架构}
+% =================================================================
+
+\subsection{包结构与懒加载机制}
+
+\texttt{lqcddb}采用Python包标准布局，通过\texttt{pyproject.toml}管理依赖。其核心特色是\texttt{\_\_init\_\_.py}中的懒加载（lazy-loading）机制：
+
+\begin{codebox}[\texttt{\_\_init\_\_.py} 懒加载核心逻辑]
+\begin{lstlisting}[style=python]
+_ATTR_TO_MODULE: dict[str, str] = {}
+
+# 将每个公开名映射到具体源模块
+for _name in ("wick_contraction", "plot_figure_wick", ...):
+    _ATTR_TO_MODULE[_name] = ".contraction.autowick"
+
+for _name in ("Jackknife", "Bootstrap", "meff", "ratio_3pt", ...):
+    _ATTR_TO_MODULE[_name] = ".analyse.analyse"
+
+def __getattr__(name: str):
+    if name in _ATTR_TO_MODULE:
+        mod_path = _ATTR_TO_MODULE[name]
+        if mod_path not in _MODULES:
+            from importlib import import_module
+            _MODULES[mod_path] = import_module(mod_path, __name__)
+        return getattr(_MODULES[mod_path], name)
+    raise AttributeError(...)
+\end{lstlisting}
+\end{codebox}
+
+\textbf{设计优势}：\texttt{from lqcddb import *}不加载任何子包——仅在首次访问属性时才导入对应的源模块。这避免了加载\texttt{mpi4py}、\texttt{cupy}、\texttt{sympy}等重依赖，除非实际使用。
+
+\subsection{全局后端切换}
+
+所有数组操作通过模块级全局状态路由到numpy或cupy：
+
+\begin{codebox}[后端切换核心代码 (\texttt{base/backend.py})]
+\begin{lstlisting}[style=python]
+_BACKEND = None
+
+def set_backend(backend: Literal["numpy", "cupy"]):
+    global _BACKEND
+    if backend == "numpy":
+        import numpy
+        _BACKEND = numpy
+    elif backend == "cupy":
+        import cupy
+        _BACKEND = cupy
+
+def get_backend():
+    if _BACKEND is None:
+        set_backend("numpy")
+    return _BACKEND
+\end{lstlisting}
+\end{codebox}
+
+\textbf{注意事项}：后端状态是全局且非线程安全的。需要临时切换后端的函数必须保存并恢复原后端。
+
+\subsection{子包功能矩阵}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+子包 & 核心导出 & 功能 \\
+\midrule
+\texttt{base/} & \texttt{set\_backend, get\_backend, cached\_contract,} & 后端切换、缓存einsum、\\
+               & \texttt{levi\_civita\_tensor, ArraySlicer, SU2combine,} & Levi-Civita、SU(2) CG系数、\\
+               & \texttt{mpinit, stout\_smear\_ndarray} & MPI初始化、规范场平滑 \\
+\texttt{constant/} & \texttt{Nc, Ns, Nd, fm2GeV, gamma(), sigma()} & 物理常量、18种DR基$\gamma$矩阵 \\
+\texttt{contraction/} & \texttt{wick\_contraction, dynamic\_contraction,} & Wick收缩引擎、注册表系统、\\
+               & \texttt{PeramRegistry, VRegistry, GammaRegistry,} & 等价图识别、$\gamma_5$时序变换、\\
+               & \texttt{seq\_peram, conjugate\_operator, analyze\_bandwidth} & 算符共轭、Roofline带宽分析 \\
+\texttt{eigvectors/} & \texttt{vector\_creator, vertex\_creator} & 本征矢量代数、VdV/VVV顶点 \\
+\texttt{analyse/} & \texttt{Jackknife, Bootstrap, meff, ratio\_3pt,} & 统计重采样、有效质量、\\
+               & \texttt{solve\_gevp, loop\_tsrc, dis\_connect} & GEVP求解、源平均、非连通图 \\
+\texttt{io/} & \texttt{write\_data\_ascii} & 二进制/ASCII本征矢读写 \\
+\bottomrule
+\end{tabular}
+\caption{lqcddb子包功能矩阵}
+\end{table}
+
+% =================================================================
+\section{核心算法一：Wick收缩自动生成}
+% =================================================================
+
+\subsection{算符DSL}
+
+\texttt{wick\_contraction}使用字符串列表定义强子算符：
+
+\begin{codebox}[算符格式约定]
+\begin{lstlisting}[style=python]
+# 味标记
+'u', 'd', 's', 'c', 'b', 't'        # 夸克
+'u^d', 'd^d', 's^d'                  # 反夸克 (^d = dagger)
+
+# 通配符 (自动展开)
+'q', 'q^d'                            # 全部六味
+'l', 'l^d'                            # 轻味(u,d)
+
+# γ矩阵插入
+'gamma_5', 'gamma_mu', 'gamma_4', 'gamma_7'
+
+# 强子分隔符与系数
+'|'                                   # 强子边界
+1, -1, 2.0                            # 数值系数
+
+# 实例
+pion = ['u^d', 'gamma_5', 'd']                # pi+
+proton = ['u', 'u', 'C*gamma_5', 'd']         # 质子
+neutron = ['d', 'u', 'C*gamma_5', 'd']        # 中子
+\end{lstlisting}
+\end{codebox}
+
+\subsection{Wick收缩算法流程}
+
+\begin{algorithm}[Wick收缩主流程]
+设$\{q_i\}$为夸克场集合，$\{\bar{q}_j\}$为反夸克场集合。算法流程如下：
+\begin{enumerate}
+\item \textbf{味分组}：将夸克和反夸克按味分类。对每味$f$，必须有$N_q^f = N_{\bar{q}}^f$（否则该味替换无效）。
+\item \textbf{生成合法配对}：对每味$f$，枚举所有完美匹配（perfect matching）。对于$n$对夸克-反夸克，共有$n!$种配对方式。
+\item \textbf{笛卡尔积组合}：取各味配对的笛卡尔积，得到全部Wick图。
+\item \textbf{计算费米子符号}：对每个图，将所有场按算符字符串中的位置排序，计算置换逆序数。符号$=(-1)^{\#\text{inversions}}$。
+\item \textbf{生成指标字符串}：为每个peram分配收缩指标（小写字母），为每个$\gamma$矩阵和V顶点分配组合指标（大写字母前缀+相邻夸克指标）。
+\item \textbf{通配符展开}：若含有\texttt{'q'}或\texttt{'l'}，对每种味替换生成独立的dict。
+\end{enumerate}
+\end{algorithm}
+
+\begin{codebox}[费米子符号计算]
+\begin{lstlisting}[style=python]
+def compute_fermion_sign(contraction_pairs: list) -> int:
+    indexed_positions = []
+    for pair_idx, pair in enumerate(contraction_pairs):
+        quark_op_pos = pair[0]       # 夸克在算符中的位置
+        antiq_op_pos = pair[1]       # 反夸克在算符中的位置
+        indexed_positions.append((quark_op_pos, pair_idx))
+        indexed_positions.append((antiq_op_pos, pair_idx))
+
+    pair_indices = [x[0] for x in indexed_positions]
+    return (-1) ** count_inversions(pair_indices)
+\end{lstlisting}
+\end{codebox}
+
+\subsection{等价图识别}
+
+\texttt{identify\_equivalent\_diagrams}通过比较peram配对结构识别等价的Wick图：
+
+\begin{codebox}[等价图识别算法]
+\begin{lstlisting}[style=python]
+def identify_equivalent_diagrams(*dicts):
+    # 对每个图的peram列表，生成所有γ转置变体
+    for dict_idx, _dicts in enumerate(dicts):
+        gamma_names = [x[1] for x in _dicts['gamma_pos']]
+        change_quark_pos = [[int(x[0])-1, int(x[0])+1]
+                           for x in _dicts['gamma_pos']]
+
+        for diag_idx, peram_entry in enumerate(peram):
+            variants = generate_all_swaps(peram_entry, change_quark_pos)
+            sorted_variants = [sorted(v, key=lambda x: x[0])
+                             for v in variants]
+            data.append(sorted_variants)
+
+    # Union-Find聚类：共享任意变体的图属于同一等价类
+    raw_groups = find_connected_groups(data)
+
+    # BFS传播相对符号
+    for group in raw_groups:
+        # 从canonical图出发，沿变体共享边传播系数
+        coeffs = {canonical_idx: canonical_rs}
+        queue = deque([canonical_idx])
+        while queue:
+            cur = queue.popleft()
+            # 检查当前图的所有变体...
+            # 通过变体共享边计算邻居的系数
+            n_coeff = cur_coeff * (n_rs / cur_rs) * (
+                n_vs_list[v_neighbor] / cur_vs_list[v_cur])
+            coeffs[neighbor] = n_coeff
+\end{lstlisting}
+\end{codebox}
+
+核心思想：两张图若通过$\gamma$矩阵两侧的夸克交换可以互相转化，则它们是等价的。算法使用并查集（Union-Find）对图进行聚类，然后用BFS沿变体共享边传播相对系数。
+
+\subsection{指标字符串与自由指标提取}
+
+Wick收缩的输出包含einsum指标字符串，格式为：
+\begin{equation}
+\texttt{peram\_indices, gamma\_indices, V\_indices -> free\_indices}
+\end{equation}
+其中\texttt{keep\_unique\_letters}函数从收缩指标中提取自由指标（小写字母只保留出现一次的，大写字母保留首次出现的），作为输出张量的轴标签。
+
+% =================================================================
+\section{核心算法二：动态收缩系统}
+% =================================================================
+
+\subsection{注册表设计}
+
+\texttt{dynamic\_contraction}系统通过三个注册表类解耦数据加载与收缩计算：
+
+\begin{codebox}[PeramRegistry — Perambulator注册表]
+\begin{lstlisting}[style=python]
+class PeramRegistry:
+    def __init__(self):
+        self._entries = {}  # {(flavor, (t_q, t_aq)): data}
+
+    def register(self, flavor, time_labels, data):
+        # flavor: 'u', 'd', 's', 'light'
+        # time_labels: ('tsink', 'tsrc'), ('tsink', 'tcur0'), ...
+        # data: ndarray, shape (..., Ns, Ns, Nev, Nev)
+        self._entries[(flavor, tuple(time_labels))] = data
+
+    def resolve(self, combined_type, time_labels):
+        qf = combined_type[0]  # 从 'uu^d' 提取夸克味 'u'
+        key = (qf, tuple(time_labels))
+        if key in self._entries:
+            return self._entries[key]
+        # 'light' 通配 u, d
+        key_light = ('light', tuple(time_labels))
+        if key_light in self._entries:
+            return self._entries[key_light]
+        raise KeyError(...)
+\end{lstlisting}
+\end{codebox}
+
+\textbf{关键设计决策}：注册表存储引用而非复制——调用者管理数组生命周期，传递视图（切片）以减少内存。
+
+\begin{codebox}[时间标签命名规范]
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+标签 & 含义 \\
+\midrule
+\texttt{'tsink'} & 汇端（sink）时间片 \\
+\texttt{'tsrc'} & 源端（source）时间片 \\
+\texttt{'tcur0'} & 第0个流插入点（3pt） \\
+\texttt{'tcur1'}, \texttt{'tcur2'}, \dots & 多点函数（4pt+）的额外插入点 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{codebox}
+
+\subsection{dynamic\_contraction类}
+
+\begin{codebox}[dynamic\_contraction初始化流程]
+\begin{lstlisting}[style=python]
+class dynamic_contraction:
+    def __init__(self, operator_groups, *, peram_registry,
+                 v_registry, gamma_registry, Cpt='2pt', ...):
+        # Step 1: 运行Wick分析 (带缓存)
+        self.plan = run_wick_analysis(operator_groups, Cpt=Cpt, ...)
+
+        # Step 2: 校验注册完整性
+        self.missing = []
+        for entry in self.plan:
+            # 检查每个peram/V/gamma是否已注册
+            w = entry[2]; di = entry[3]
+            for p in w['peram'][di]:
+                try: peram_registry.resolve(p[2], p[4])
+                except KeyError: self.missing.append(...)
+            # ... V和gamma的类似检查
+
+    def calculate(self, index):
+        entry = self.plan[index]
+        # 等价类系数之和为0 → 跳过
+        coeffs = [c for _, _, c in entry[0]]
+        total_coeff = sum(coeffs)
+        if abs(total_coeff) < 1e-12: return 0
+
+        # 解析张量 + cached_contract
+        return calculate_contraction(entry, ...)
+
+    def calculate_all(self):
+        result = 0
+        for i in range(len(self.plan)):
+            result = result + self.calculate(i)
+        return result
+\end{lstlisting}
+\end{codebox}
+
+\subsection{双侧投影（Baryon Projection）}
+
+重子关联函数需要将自旋指标通过投影算符收缩。\texttt{dynamic\_contraction}支持通过\texttt{GammaRegistry}注册\texttt{'Projector'}键（两个投影算符的序列\texttt{[proj\_sink, proj\_src]}）来实现：
+
+\begin{codebox}[双侧投影einsum构建]
+\begin{lstlisting}[style=python]
+def _build_projection_einsum(ein, proj_label, output_labels,
+                             oindex_given=False):
+    lhs, rhs = ein.split('->')
+    spin_out = rhs[:2]  # 两个输出自旋指标
+    a, s = spin_out[0], spin_out[1]
+
+    if oindex_given:
+        # 投影指标互相收缩: 输出严格按 Oindex
+        z = [c for c in 'ABC...XYZ' if c not in used][0]
+        return (f'{lhs},{proj_label}{a}{z},{proj_label}{s}{z}'
+                f'->{output_labels}')
+
+    # 默认: 引入两个新自由指标 X, Y
+    x, y = [c for c in 'ABC...XYZ' if c not in used][:2]
+    return (f'{lhs},{proj_label}{a}{x},{proj_label}{s}{y}'
+            f'->{x}{y}{proj_label}{output_labels}')
+\end{lstlisting}
+\end{codebox}
+
+例如，质子投影算符 $\mathcal{P} = \frac{1}{2}(\gamma_0 + \gamma_4)$ 在代码中通过\texttt{projection = (gamma(0) + gamma(4))/2}注册。
+
+\subsection{收缩路径优化与缓存}
+
+\begin{codebox}[cached\_contract — 带缓存的张量收缩]
+\begin{lstlisting}[style=python]
+_expr_cache: Dict[Tuple, Any] = {}
+
+def cached_contract(einsum_str, *tensors, optimize='auto'):
+    shapes = tuple(t.shape for t in tensors)
+    key = (einsum_str, shapes, opt_key)
+
+    # 缓存命中 → 直接执行
+    expr = _expr_cache.get(key)
+    if expr is not None:
+        return expr(*tensors)
+
+    # 缓存未命中 → 编译路径 + 择优
+    placeholders = [np.broadcast_to(np.empty((), dtype=t.dtype), t.shape)
+                    for t in tensors]
+
+    best_path, best_cost = None, (float('inf'), float('inf'))
+    for opt in candidate_opts:  # auto, greedy, optimal, dp
+        path, path_info = contract_path(einsum_str, *placeholders,
+                                        optimize=opt)
+        cost = (path_info.opt_cost, path_info.largest_intermediate)
+        if cost < best_cost:
+            best_cost, best_path = cost, path
+
+    expr = contract_expression(einsum_str, *shapes, optimize=best_path)
+    _expr_cache[key] = expr
+    return expr(*tensors)
+\end{lstlisting}
+\end{codebox}
+
+关键点：首次调用时尝试\texttt{auto}、\texttt{greedy}、\texttt{optimal}、\texttt{dp}四种策略，选择FLOP最小的路径；后续调用直接复用编译后的表达式。
+
+% =================================================================
+\section{核心算法三：本征矢量与顶点函数}
+% =================================================================
+
+\subsection{本征矢量代数 (\texttt{vector\_creator})}
+
+\begin{codebox}[本征矢量正交归一化检查]
+\begin{lstlisting}[style=python]
+class vector_creator:
+    def check(self, eigvecs, dtype='find', tol=1e-10,
+              check_normal=True):
+        # 展开空间+色指标
+        V = np.prod(eigvecs.shape[1:])
+        eigvecs_flat = eigvecs.reshape(eigvecs.shape[0], V)
+
+        # 计算重叠矩阵 A_{kn} = <xi_k | xi_n>
+        A = contract('nV,NV->nN', eigvecs_flat,
+                     eigvecs_flat.conj())
+
+        # 检查归一化: |A_{ii} - 1| < tol
+        if check_normal:
+            for i in range(eigvecs.shape[0]):
+                if ((A[i,i] - 1) * (A[i,i] - 1).conj()).real >= tol:
+                    return False  # 不正交
+                A[i,i] -= 1
+
+        # 检查正交性: |A_{i≠j}| < tol
+        return not (A >= tol).any()
+\end{lstlisting}
+\end{codebox}
+
+四种种压缩方法（\texttt{compress\_matrix\_V1-V4}）：
+\begin{itemize}
+\item \textbf{V1 (Sum)}：将每组$N_{\mathrm{eigen}}/N_{\mathrm{sum}}$个本征矢求和为一个
+\item \textbf{V2 (Extract)}：从每组中随机抽取$N_{\mathrm{extract}}$个
+\item \textbf{V3 (Random+Orth)}：随机线性组合后正交归一化
+\item \textbf{V4 (General)}：支持正交归一化或$\mathbb{Z}_N$随机向量
+\end{itemize}
+
+压缩策略支持三种分组模式：
+\begin{itemize}
+\item \textbf{I (Interlace)}：交错式——将所有本征矢均匀交错分配到各组
+\item \textbf{B (Block)}：分块式——连续的本征矢分入同一组
+\item \textbf{BI (Block-Interlace)}：第一维分块，第二维交错
+\end{itemize}
+
+\subsection{动量相因子}
+
+\begin{codebox}[相因子计算 (\texttt{phase\_exp\_2pt})]
+\begin{lstlisting}[style=python]
+def phase_exp_2pt(self, Mom=[0,0,0]):
+    if all(x == 0 for x in Mom):
+        return backend.ones((Nx, Nx, Nx, Nc), dtype=complex)
+
+    factor = -2j * pi / Nx
+    z_phase = exp(factor * Mom[0] * z[:, None, None])
+    y_phase = exp(factor * Mom[1] * y[None, :, None])
+    x_phase = exp(factor * Mom[2] * x[None, None, :])
+
+    phase_3d = z_phase * y_phase * x_phase  # 广播组合
+    return stack([phase_3d, phase_3d, phase_3d], axis=-1)
+\end{lstlisting}
+\end{codebox}
+
+数学上，动量投影相因子为：
+\begin{equation}
+e^{-i\vec{p}\cdot\vec{x}} = \exp\left( -\frac{2\pi i}{L} (p_z z + p_y y + p_x x) \right)
+\end{equation}
+注意动量顺序为$[p_z, p_y, p_x]$（z分量最快）。
+
+\subsection{VDV顶点（带规范链接）}
+
+\begin{codebox}[VdV\_sink\_t\_link — 三种计算情形]
+\begin{lstlisting}[style=python]
+def VdV_sink_t_link(self, eigvecs, phase_exp, link_dir,
+                    link_max, gauge_link, eigvecs_max, conserved):
+    # 情形1: 无规范链接
+    if gauge_link is None or isinstance(gauge_link, bool):
+        # V_{mn}(p) = sum_x e^{-ipx} xi_m*(x) xi_n(x)
+        VDV[:,0,:,:] = contract('VN,mV,nV->mNn',
+            eigvecs_conj_T, phase_exp, eigvecs_flat)
+
+    # 情形2: 守恒流 / 时间方向
+    if conserved or link_dir == 'T':
+        # V[0] = xi* @ U_t @ xi_max
+        # V[1] = xi_max* @ U_t* @ xi
+        VDV[0] = contract('nvc,vcb,Nvb->nN',
+            ev.conj(), glink, ev_max)
+        VDV[1] = contract('nvc,vbc,Nvb->nN',
+            ev_max.conj(), glink.conj(), ev)
+
+    # 情形3: 空间方向 (X/Y/Z/all)
+    for link_indx in range(-link_max, link_max+1):
+        eig_rolled = roll(eigvecs, -link_indx, axis=roll_ax)
+        # 构建规范输运路径
+        if link_indx != 0:
+            gauge_path = 构建 U(x)...U(x+link_indx-1)
+            link_rolled = contract('vcb,Nvb->Nvc',
+                gauge_path, eig_rolled)
+        # 对所有动量同时收缩
+        VDV[:, link_indx+link_max] += contract(
+            'VN,mV,nV->mNn', eigvecs_conj_T, phase_exp, link_flat)
+\end{lstlisting}
+\end{codebox}
+
+\subsection{VVV顶点}
+
+\begin{codebox}[Mom\_VVV\_sink\_t — 三夸克顶角]
+\begin{lstlisting}[style=python]
+def Mom_VVV_sink_t(self, phase_exp, eigvecs):
+    VVV = zeros((num_Mom, Nev, Nev, Nev), dtype=complex)
+
+    for dir in range(1, Nx+1):
+        # 六个排列项: 完全反对称化
+        VVV += contract("Mzyx,azyx,bzyx,czyx->Mabc",
+            phase_exp, eig_a, eig_b, eig_c)    # +abc
+        VVV += contract("Mzyx,azyx,bzyx,czyx->Mabc",
+            phase_exp, eig_b, eig_c, eig_a)    # +bca
+        VVV += contract("Mzyx,azyx,bzyx,czyx->Mabc",
+            phase_exp, eig_c, eig_a, eig_b)    # +cab
+        VVV -= contract("Mzyx,azyx,bzyx,czyx->Mabc",
+            phase_exp, eig_a, eig_c, eig_b)    # -acb
+        VVV -= contract("Mzyx,azyx,bzyx,czyx->Mabc",
+            phase_exp, eig_b, eig_a, eig_c)    # -bac
+        VVV -= contract("Mzyx,azyx,bzyx,czyx->Mabc",
+            phase_exp, eig_c, eig_b, eig_a)    # -cba
+
+    return VVV
+\end{lstlisting}
+\end{codebox}
+
+数学上，VVV顶角编码了$\epsilon^{abc}$颜色反对称化$+$颜色空间本征矢量的三线性组合：
+\begin{equation}
+\mathrm{VVV}_{klm}(\vec{p}) = \sum_{\vec{x}} e^{-i\vec{p}\cdot\vec{x}} \;
+\epsilon^{abc} \; \xi^{(k)a}_{\vec{x}} \; \xi^{(l)b}_{\vec{x}} \; \xi^{(m)c}_{\vec{x}}
+\end{equation}
+六个排列项对应$\epsilon^{abc}$的六个非零分量（$+1$或$-1$）。
+
+\subsection{Ω蒸馏权重矩阵}
+
+\texttt{create\_omega\_accelerate}构建任意维度的蒸馏权重张量：
+\begin{equation}
+\Omega_{i_1 i_2 \dots i_D} = \prod_{d=1}^{D} \sqrt{ \frac{N_{\mathrm{space}}^{(i_d)} - c_d}{N_{\mathrm{sum}}^{(i_d)} - c_d} }
+\end{equation}
+其中$c_d$为维度$d$上已使用的索引计数（处理对角元素的权重衰减）。
+
+% =================================================================
+\section{核心算法四：统计分析}
+% =================================================================
+
+\subsection{Jackknife重采样}
+
+\begin{codebox}[Jackknife实现]
+\begin{lstlisting}[style=python]
+def Jackknife(data, Nconf_axes=0, cov_axes=None):
+    Nconf = data.shape[Nconf_axes]
+
+    # 1. Jackknife样本: x_{(k)} = -(x - sum(x))/ (N-1)
+    data_sum = sum(data, axis=Nconf_axes, keepdims=True)
+    data_sample = -(data - data_sum) / (Nconf - 1)
+
+    # 2. 均值与误差
+    data_mean = mean(data, axis=Nconf_axes)
+    data_err = sqrt(Nconf - 1) * std(data_sample, axis=Nconf_axes)
+
+    # 3. 协方差矩阵 (沿指定轴)
+    if cov_axes is not None:
+        residual = data_sample - data_mean
+        cov = einsum('n...i,n...j->...ij', r_flat, r_flat)
+        cov *= (Nconf - 1) / Nconf
+
+    return {'data_sample': data_sample, 'data_mean': data_mean,
+            'data_err': data_err, 'data_cov': cov}
+\end{lstlisting}
+\end{codebox}
+
+\subsection{有效质量提取}
+
+\begin{codebox}[meff — 三种有效质量方法]
+\begin{lstlisting}[style=python]
+def meff(data_sample, alttc, Nconf_axes=0, Nt_axes=1,
+         meff_type='log'):
+    if meff_type == 'log':
+        meff[t] = log(C(t) / C(t+1)) * (fm2GeV / alttc)
+
+    elif meff_type == 'cosh':
+        meff[t] = arccosh((C(t+2) + C(t)) / (2*C(t+1)))
+                  * (fm2GeV / alttc)
+
+    elif meff_type == 'GEVP':
+        meff[t] = log(lambda(t) / lambda(t+1)) * (fm2GeV / alttc)
+
+    # 对Jackknife样本取统计
+    meff_mean = mean(meff_sample, axis=Nconf_axes)
+    meff_err = std(meff_sample, axis=Nconf_axes) * sqrt(Nconf-1)
+    return {'data_sample': meff_sample, 'data_mean': meff_mean,
+            'data_err': meff_err}
+\end{lstlisting}
+\end{codebox}
+
+\subsection{三点函数比值 (ratio\_3pt)}
+
+\begin{codebox}[ratio\_3pt — PDF矩阵元提取]
+\begin{lstlisting}[style=python]
+def ratio_3pt(data_3pt_sample, data_2ptI_sample,
+              data_2ptF_sample=None, t_sep=12, ...):
+    # 公式:
+    # R = C3 / C2F(tsep) * sqrt(
+    #     C2I(tsep-tau) C2F(tau) C2F(tsep) /
+    #     (C2F(tsep-tau) C2I(tau) C2I(tsep))
+    # )
+
+    # Link折叠 (前向+后向平均)
+    if link_fold and link_axes is not None:
+        data_3pt_sample = _fold_link(data_3pt_sample, link_axes)
+
+    # 1D模式: 单时间轴
+    if t_src_axes is None:
+        C2F_tsep_minus_tau = slice(C2F, t_sep - arange(Ntau))
+        sqrt_term = sqrt(max(
+            C2I(tshift)*C2F(tau)*C2F(tsep) /
+            (C2F(tshift)*C2I(tau)*C2I(tsep)), 0))
+        ratio_sample = C3 / C2F(tsep) * sqrt_term
+
+    # 2D模式: 双时间轴 (源+tau)
+    else:
+        for t_src in range(Nt_src):
+            # 循环源时间, 计算每个tsrc的比值
+            ratio_slice = C3_by_tau / C2F_tsep * sqrt_term
+
+    ratio_mean = mean(ratio_sample.real, axis=Nconf_axes)
+    ratio_err = std(ratio_sample.real, axis=Nconf_axes)*sqrt(Nconf-1)
+\end{lstlisting}
+\end{codebox}
+
+\subsection{GEVP求解}
+
+\begin{codebox}[solve\_gevp — 广义特征值问题]
+\begin{lstlisting}[style=python]
+def solve_gevp(C, t0):
+    # C: (N, N, Nt) 关联函数矩阵
+    for t in range(Nt):
+        # 求解 C(t) v = lambda C(t0) v
+        eigenvalues, eigenvectors = eigh(C[...,t], C[...,t0])
+
+        if t < t0:
+            order = argsort(eigenvalues)        # 升序
+        else:
+            order = argsort(eigenvalues)[::-1]  # 降序
+
+        eigenvalues = eigenvalues[order]
+        # 归一化特征矢量: v -> v / sqrt(v* @ v)
+        eigenvectors = eigenvectors[:, order]
+        coeff = eigenvectors.conj().T @ eigenvectors
+        eigenvectors = eigenvectors / sqrt(diag(coeff))
+
+    return C_GEVP, C_eigenvectors
+\end{lstlisting}
+\end{codebox}
+
+\subsection{非连通图分析 (dis\_connect)}
+
+\texttt{dis\_connect}实现非连通图贡献的计算：$C_{3\mathrm{pt}}^{\mathrm{disc}} = C_{2\mathrm{pt}}^{\mu\nu} - \braket{C_{2\mathrm{pt}}^{\mu\nu}} \braket{C_{\mathrm{bubble}}}$，用于胶子PDF的OPE部分。
+
+% =================================================================
+\section{运行实例分析}
+% =================================================================
+
+\subsection{实例一：质子-中子两点函数 (\texttt{contraction.pn.2pt.cupy.py})}
+
+这是一个典型的GPU蒸馏收缩计算。完整流程：
+
+\begin{codebox}[实例一主要流程]
+\begin{lstlisting}[style=python]
+# ── 初始化 ──
+set_backend('cupy')
+mpinit(grid_size=[1,1,1,1], latt_size=[32,32,32,64])
+
+# ── 动量列表生成 ──
+Mom_sink_VDV = [[0,0,0]] + creat_mom_list([0,0,1])
+              + creat_mom_list([0,1,1]) + creat_mom_list([1,1,1])
+Mom_sink_VVV = [[0,0,0]] + ...  # 反序
+
+# ── 加载本征矢量 + 计算VdV/VVV ──
+for t_src in t_rank:
+    eigvecs = load(f'{eigen_path}/{conf_id}_t{t_src:03d}_...npy')
+    sink_VdV[t_src_indx] = Mom_VdV_sink_t(phase_exp, eigvecs)
+    sink_VVV[t_src_indx] = Mom_VVV_sink_t(phase_exp, eigvecs)
+
+# ── 主循环: 对每个源时间片 ──
+for t_src in range(Nt):
+    # 加载perambulator + seq_peram获取反夸克传播子
+    peram_u = load(f'{peram_path}/t{t_src:03d}_...npy')
+    peram_d = seq_peram(peram_u)  # gamma_5 时序变换
+
+    for t_sink in t_sink_list:
+        # 12个Wick收缩图（中子pi+道）
+        corr[0] = -contract('oapb,kelf,...,ek->NM',
+            peram_u, peram_u, ..., gamma(7), gamma(5), ...,
+            source_VVV, source_VdV, sink_VdV, sink_VVV, projection)
+        # ... 11 more diagrams ...
+
+# ── 源平均 + 保存 ──
+corr = loop_tsrc(corr, indx=[-2,-1],
+                 Boundary_Conditions='Antiperiodic')
+np.save(f'{save_path}/corr_ud_2pt_...npy', corr)
+\end{lstlisting}
+\end{codebox}
+
+\textbf{物理对应关系}：
+
+每个\texttt{contract}调用对应一个Wick收缩图。例如第一个图：
+\begin{lstlisting}[style=einsum]
+contract('oapb,kelf,sgth,icjd,qmrn,ac,mo,gi,qs,Nbdf,Nnp,Mhj,Mlrt,ek->NM',
+        peram_u[t_src], peram_u[t_sink], peram_u[t_src], peram_u[t_sink],
+        peram_u[t_sink], gamma(7), gamma(5), gamma(5), gamma(7),
+        source_VVV, source_VdV, sink_VdV, sink_VVV, projection)
+\end{lstlisting}
+
+指标对应关系：
+\begin{itemize}
+\item \texttt{oapb, kelf, sgth, icjd, qmrn} — 五个perambulator（5个夸克传播子$\tau$）
+\item \texttt{ac, mo, gi, qs} — 四个$\gamma$矩阵（$\gamma_7$, $\gamma_5$, $\gamma_5$, $\gamma_7$）
+\item \texttt{Nbdf, Nnp, Mhj, Mlrt} — sink VVV、source VdV、sink VdV、source VVV
+\item \texttt{ek} — 投影算符 $\mathcal{P} = (\gamma_0 + \gamma_4)/2$
+\item \texttt{->NM} — 输出：$N$个sink动量 $\times$ $M$个source动量
+\end{itemize}
+
+\textbf{$\gamma_5$时序变换}：\texttt{seq\_peram(peram)}实现
+\begin{equation}
+\tilde{\tau}(t_{\mathrm{sink}}, t_{\mathrm{src}}) = \gamma_5 \, \tau^*(t_{\mathrm{sink}}, t_{\mathrm{src}}) \, \gamma_5
+\end{equation}
+将夸克peram转换为反夸克peram（利用$\gamma_5$-厄米性）。
+
+\subsection{实例二：质子-流-中子三点函数 (\texttt{contraction.PJN.3pt.cupy.py})}
+
+三点函数引入流算符插入，计算矩阵元$\braket{N|\bar{u}\gamma_\mu d|P}$：
+
+\begin{codebox}[实例二关键差异]
+\begin{lstlisting}[style=python]
+# 构建弱流 gamma_w = (1-gamma_5) * gamma_mu
+gamma_curr = (gamma(0) - gamma(5)) @ [gamma(1),gamma(2),gamma(3),gamma(4)]
+
+# 对每个流插入时间 t_curr
+for t_curr in t_curr_list_indx:
+    peram_u_src_seq = seq_peram(peram_u_src[t_curr])
+
+    # 四个Wick图求和
+    corr_3pt += contract(
+        'eifj,okpl,ambn,cgdh,ce,Gmo,gi,Nbdf,NLnp,Mhjl,ka->MNGL',
+        peram_u[t_sink], peram_u[t_curr], peram_u_sink_seq[t_curr],
+        peram_u[t_sink], gamma(7), gamma_curr, gamma(7),
+        sink_VVV, VdV_link[t_curr], source_VVV, projection) * (-1.0)
+    # ... +3 more diagrams ...
+\end{lstlisting}
+\end{codebox}
+
+\textbf{三点函数的物理结构}：
+
+输出形状为\texttt{(M, N, G, L)}：
+\begin{itemize}
+\item \texttt{M} — sink动量（质子）
+\item \texttt{N} — source动量（中子）
+\item \texttt{G} — 流算符分量（$\gamma_1, \gamma_2, \gamma_3, \gamma_4$）
+\item \texttt{L} — 规范链接位移（$\Delta z = -L_{\max}, \dots, +L_{\max}$）
+\end{itemize}
+
+\subsection{实例三：动态收缩（实验性API）}
+
+\texttt{test.dynamic.py}演示了\texttt{dynamic\_contraction}的新API：
+
+\begin{codebox}[动态收缩API实例]
+\begin{lstlisting}[style=python]
+from lqcddb import *
+
+# 注册数据
+peram_reg = PeramRegistry()
+peram_reg.register('light', ('tsink', 'tsrc'), peram_array)
+
+v_reg = VRegistry()
+v_reg.register('VVV_0', 'tsink', sink_VVV)
+v_reg.register('VDV_0', 'tsrc', source_VdV)
+
+gamma_reg = GammaRegistry()
+gamma_reg.register('gamma_5', gamma(5))
+gamma_reg.register('gamma_7', gamma(7))
+
+# 定义算符
+sink_op = ['|', 'u', 'u', 'gamma_7', 'd', '|']
+src_op = ['|', 'u^d', 'gamma_7', 'd^d', 'u^d', '|']
+
+# 动态收缩
+dc = dynamic_contraction(
+    [(sink_op, src_op)],
+    peram_registry=peram_reg,
+    v_registry=v_reg,
+    gamma_registry=gamma_reg,
+    Cpt='2pt', use_equivalence=True, ignore_dis=True
+)
+result = dc.calculate_all()
+\end{lstlisting}
+\end{codebox}
+
+\subsection{实例四：统计分析工作流}
+
+\begin{codebox}[Jackknife + 有效质量]
+\begin{lstlisting}[style=python]
+# 1. 加载多个组态的两点函数
+corr_2pt = np.stack([np.load(f'conf{c}_2pt.npy')
+                     for c in conf_list])  # (Nconf, Nt)
+
+# 2. Jackknife重采样
+jk = Jackknife(corr_2pt, Nconf_axes=0)
+# jk['data_sample']: (Nconf, Nt)
+# jk['data_mean']: (Nt,)
+# jk['data_err']: (Nt,)
+
+# 3. 有效质量
+meff_result = meff(jk['data_sample'], alttc=0.1053,
+                   meff_type='cosh')
+# meff_result['data_mean']: 有效质量均值 vs t
+# meff_result['data_err']: 有效质量误差
+
+# 4. 三点函数比值 (PDF矩阵元)
+ratio = ratio_3pt(data_3pt_sample, data_2ptI_sample,
+                  data_2ptF_sample, t_sep=12,
+                  link_fold=True)
+# ratio['data_mean']: R(z, tau) 矩阵元
+\end{lstlisting}
+\end{codebox}
+
+% =================================================================
+\section{代码逻辑与物理逻辑的对应关系}
+% =================================================================
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}p{5cm}p{3cm}p{6cm}@{}}
+\toprule
+物理量/操作 & lqcddb模块/函数 & 代码实现关键 \\
+\midrule
+夸克传播子 $D^{-1}$ & — & 外部输入（perambulator .npy文件） \\
+Perambulator $\tau_{kl}^{\alpha\beta}$ & \texttt{PeramRegistry} & \texttt{register(flavor, time\_labels, data)} \\
+$\gamma_5$-厄米共轭 & \texttt{seq\_peram()} & $\tilde{\tau} = \gamma_5 \tau^* \gamma_5$ \\
+本征矢量 $\xi^{(k)}_{\vec{x}}$ & \texttt{vector\_creator} & \texttt{check(), normal(), compress\_*()} \\
+动量投影 $e^{-i\vec{p}\cdot\vec{x}}$ & \texttt{vertex\_creator} & \texttt{phase\_exp\_2pt(), phase\_exp\_3pt()} \\
+VDV顶角 $V_{kl}(\vec{p})$ & \texttt{vertex\_creator} & \texttt{Mom\_VdV\_sink\_t(), VdV\_sink\_t\_link()} \\
+VVV顶角 $V_{klm}(\vec{p})$ & \texttt{vertex\_creator} & \texttt{Mom\_VVV\_sink\_t()} \\
+Ω蒸馏权重 & \texttt{vertex\_creator} & \texttt{create\_omega\_accelerate()} \\
+Wick收缩枚举 & \texttt{wick\_contraction()} & 味分组→完美匹配→笛卡尔积→\\
+&& 费米子符号计算 \\
+等价图识别 & \texttt{identify\_equivalent\_diagrams()} & Union-Find + BFS符号传播 \\
+收缩图可视化 & \texttt{plot\_figure\_wick()} & matplotlib自动布局 \\
+einsum收缩 & \texttt{dynamic\_contraction} & Registry→Wick分析→校验→\\
+&& \texttt{cached\_contract} \\
+收缩路径优化 & \texttt{cached\_contract()} & FLOP最小的opt\_einsum策略 \\
+Roofline带宽分析 & \texttt{analyze\_bandwidth()} & 硬件规格+切分建议 \\
+Jackknife重采样 & \texttt{Jackknife()} & $\bar{x}_{(k)} = -(x - \Sigma)/(N-1)$ \\
+Bootstrap重采样 & \texttt{Bootstrap()} & 有放回随机抽样 \\
+有效质量 $E_{\mathrm{eff}}$ & \texttt{meff()} & log, cosh, GEVP三种方法 \\
+三点/两点比值 $R$ & \texttt{ratio\_3pt()} & 含link折叠、1D/2D模式 \\
+GEVP求解 & \texttt{solve\_gevp()} & \texttt{scipy.linalg.eigh}求解 \\
+源时间平均 & \texttt{loop\_tsrc()} & 周期/反周期边界条件 \\
+非连通图 & \texttt{dis\_connect()} & $C_{3\mathrm{pt}}^{\mathrm{disc}}$ 公式 \\
+SU(3)色因子 & \texttt{levi\_civita\_tensor(3)} & $\epsilon^{abc}$ \\
+SU(2) CG系数 & \texttt{SU2combine(), SU2decompose()} & CG系数耦合/分解 \\
+$\gamma$矩阵(DR基) & \texttt{gamma(i)} & 18种预定义$\gamma$矩阵 \\
+动量→$\gamma$映射 & \texttt{PFF\_Mom\_to\_gamma\_new()} & Levi-Civita投影 \\
+\bottomrule
+\end{tabular}
+\caption{物理-代码对应表}
+\end{table}
+
+% =================================================================
+\section{γ矩阵体系（DeGrand-Rossi基）}
+% =================================================================
+
+DeGrand-Rossi（DR）基是手征非对角的$\gamma$矩阵表示：
+
+\begin{physicsbox}[DR基$\gamma$矩阵定义]
+\begin{align}
+\gamma_0 &= I_{4\times 4}, &
+\gamma_1 &= \begin{pmatrix} 0 & 0 & 0 & i \\ 0 & 0 & i & 0 \\ 0 & -i & 0 & 0 \\ -i & 0 & 0 & 0 \end{pmatrix}, &
+\gamma_2 &= \begin{pmatrix} 0 & 0 & 0 & -1 \\ 0 & 0 & 1 & 0 \\ 0 & 1 & 0 & 0 \\ -1 & 0 & 0 & 0 \end{pmatrix} \\
+\gamma_3 &= \begin{pmatrix} 0 & 0 & i & 0 \\ 0 & 0 & 0 & -i \\ -i & 0 & 0 & 0 \\ 0 & i & 0 & 0 \end{pmatrix}, &
+\gamma_4 &= \begin{pmatrix} 0 & 0 & 1 & 0 \\ 0 & 0 & 0 & 1 \\ 1 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 \end{pmatrix}, &
+\gamma_5 &= \begin{pmatrix} 1 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 \\ 0 & 0 & -1 & 0 \\ 0 & 0 & 0 & -1 \end{pmatrix}
+\end{align}
+\end{physicsbox}
+
+18种$\gamma$矩阵组合的物理含义：
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}cll@{}}
+\toprule
+索引 & 表达式 & 物理含义 \\
+\midrule
+0 & $I$ & 恒等 \\
+1--4 & $\gamma_1, \gamma_2, \gamma_3, \gamma_4$ & 矢量Dirac矩阵 \\
+5 & $\gamma_5$ & 手征矩阵 \\
+6--8 & $-\gamma_i \gamma_4 \gamma_5$ & 张量-赝标量组合 \\
+9--11 & $\gamma_i \gamma_4$ & 动量提升组合 \\
+12--15 & $\gamma_i \gamma_5$ & 轴矢量 \\
+16 & $\frac{1}{2}(\gamma_0+\gamma_4)\gamma_3\gamma_1$ & 投影组合 \\
+17 & $\frac{1}{2}(\gamma_0-\gamma_4)\gamma_3\gamma_1$ & 投影组合 \\
+\bottomrule
+\end{tabular}
+\caption{DR基$\gamma$矩阵组合}
+\end{table}
+
+在Wick收缩中，$\gamma$矩阵插入在夸克传播子之间：
+\begin{equation}
+[\tau(t_1, t_2) \, \Gamma \, \tau(t_2, t_3)]_{\alpha\gamma}^{kl}
+= \sum_{\beta, m} \tau_{\alpha\beta}^{km}(t_1, t_2) \, \Gamma_{\beta\gamma} \, \tau_{\beta\gamma}^{ml}(t_2, t_3)
+\end{equation}
+其中$\Gamma \in \{\gamma_0, \dots, \gamma_{17}\}$。
+
+% =================================================================
+\section{张量指标约定}
+% =================================================================
+
+lqcddb使用的张量形状约定（蒸馏框架标准）：
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+张量 & 形状 & 说明 \\
+\midrule
+本征矢量 & \texttt{(Nev, Nz, Ny, Nx, Nc)} & $N_{\mathrm{ev}}$个本征矢, 空间+颜色 \\
+Perambulator & \texttt{(Nt, Nd, Nd, Nev, Nev)} & 时间, Dirac源, Dirac汇, 本征矢指标 \\
+规范场 & \texttt{(Nd-1, Nt, Nz, Ny, Nx, Nc, Nc)} & 3个空间方向, 时间, 空间, SU(3)色 \\
+VDV顶角 & \texttt{(N\_mom, Nev, Nev)} & 动量, 本征矢源, 本征矢汇 \\
+VVV顶角 & \texttt{(N\_mom, Nev, Nev, Nev)} & 动量, 三个本征矢指标 \\
+$\gamma$矩阵 & \texttt{(4, 4)} & Dirac自旋空间 \\
+投影算符 & \texttt{(4, 4)} & 重子自旋投影 \\
+动量列表 & \texttt{[pz, py, px]} & z分量最快 \\
+\bottomrule
+\end{tabular}
+\caption{lqcddb张量约定}
+\end{table}
+
+% =================================================================
+\section{关键设计模式}
+% =================================================================
+
+\subsection{懒加载与依赖隔离}
+
+\texttt{\_\_getattr\_\_}+ \texttt{\_ATTR\_TO\_MODULE}映射使得重依赖（mpi4py, cupy, sympy）仅在首次访问相关属性时才被导入。这允许在没有GPU的环境中安全地\texttt{import lqcddb}并使用CPU功能。
+
+\subsection{注册表模式（Registry Pattern）}
+
+\texttt{PeramRegistry}、\texttt{VRegistry}、\texttt{GammaRegistry}三个注册表类实现数据与计算逻辑的分离：
+\begin{itemize}
+\item 数据按（味，时间标签）或（名称，时间标签）键存储
+\item 查找时支持通配符（如\texttt{'light'}同时匹配\texttt{u}和\texttt{d}）
+\item 存储引用而非副本——内存由调用者管理
+\end{itemize}
+
+\subsection{计划缓存（Plan Cache）}
+
+\texttt{run\_wick\_analysis}内部维护\texttt{\_plan\_cache}字典，键为（算符组，Cpt，指标前缀，等价图选项等）的可哈希元组。相同算符配置的重复调用直接返回缓存结果，避免重新分析Wick收缩（计算量随夸克数量阶乘增长）。
+
+\subsection{cached\_contract缓存策略}
+
+\texttt{cached\_contract}在模块级维护\texttt{\_expr\_cache}，键为\texttt{(einsum\_str, shapes, opt\_key)}。首次调用编译收缩路径（尝试四种优化策略选择FLOP最小者），后续调用直接执行编译后的表达式。调用\texttt{clear\_cache()}可清空缓存释放内存。
+
+% =================================================================
+\section{数据流全景}
+% =================================================================
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  node distance=1.2cm,
+  box/.style={rectangle, draw, rounded corners, minimum width=4.5cm, minimum height=0.8cm, align=center, font=\small},
+  data/.style={rectangle, draw, fill=blue!5, rounded corners, minimum width=3cm, minimum height=0.7cm, align=center, font=\footnotesize},
+  arrow/.style={->, >=stealth, thick}
+]
+\node[box,fill=green!10] (gauge) {规范场组态};
+\node[box,fill=yellow!10, below=of gauge] (eigen) {拉普拉斯本征矢量 \\ \texttt{vector\_creator}};
+\node[box,fill=orange!10, below=of eigen] (vertex) {顶点函数 \\ \texttt{vertex\_creator}};
+\node[data, right=2cm of vertex] (vdvvvv) {VdV / VVV 数组};
+
+\node[box,fill=blue!10, below=of vertex] (peram) {Perambulator \\ \texttt{PeramRegistry}};
+\node[box,fill=purple!10, below=of peram] (wick) {Wick收缩分析 \\ \texttt{wick\_contraction}};
+\node[box,fill=red!10, below=of wick] (dynamic) {动态收缩 \\ \texttt{dynamic\_contraction}};
+\node[data, right=2cm of dynamic] (corr) {关联函数};
+
+\node[box,fill=cyan!10, below=of dynamic] (analysis) {统计分析 \\ \texttt{Jackknife/meff/ratio\_3pt}};
+\node[data, right=2cm of analysis] (result) {能谱 / 矩阵元};
+
+\draw[arrow] (gauge) -- (eigen);
+\draw[arrow] (eigen) -- (vertex);
+\draw[arrow] (eigen) -- (peram);
+\draw[arrow] (peram) -- (dynamic);
+\draw[arrow] (vertex) -- (vdvvvv);
+\draw[arrow] (vdvvvv) -- (dynamic);
+\draw[arrow] (wick) -- (dynamic);
+\draw[arrow] (dynamic) -- (corr);
+\draw[arrow] (corr) -- (analysis);
+\draw[arrow] (analysis) -- (result);
+\end{tikzpicture}
+\caption{lqcddb数据流全景}
+\end{figure}
+
+\end{document}

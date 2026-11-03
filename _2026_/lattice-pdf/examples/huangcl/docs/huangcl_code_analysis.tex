@@ -1,0 +1,1574 @@
+% !TEX program = xelatex
+\documentclass[12pt,a4paper]{ctexart}
+
+% ============================================================
+% 页边距与排版
+% ============================================================
+\usepackage[top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% ============================================================
+% 数学与物理
+% ============================================================
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{physics}
+\usepackage{braket}
+\usepackage{bm}
+
+% ============================================================
+% 图表与颜色
+% ============================================================
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage[table]{xcolor}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\tcbuselibrary{listings, breakable, skins}
+
+% ============================================================
+% 超链接与参考文献
+% ============================================================
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+% ============================================================
+% 定理环境
+% ============================================================
+\newtheorem{theorem}{定理}[section]
+\newtheorem{definition}{定义}[section]
+\newtheorem{remark}{注记}[section]
+\newtheorem{equationN}{公式}[section]
+
+% ============================================================
+% 代码环境设置
+% ============================================================
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{keyword}{RGB}{0,0,180}
+\definecolor{comment}{RGB}{0,130,0}
+\definecolor{string}{RGB}{180,60,0}
+\definecolor{number}{RGB}{120,120,120}
+
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    breaklines=true,
+    breakatwhitespace=false,
+    numbers=left,
+    numberstyle=\tiny\color{number},
+    numbersep=8pt,
+    keywordstyle=\color{keyword}\bfseries,
+    commentstyle=\color{comment}\itshape,
+    stringstyle=\color{string},
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+    xleftmargin=0.5cm,
+    xrightmargin=0.5cm,
+    aboveskip=8pt,
+    belowskip=8pt
+}
+
+\lstdefinestyle{bashstyle}{
+    language=bash,
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    breaklines=true,
+    numbers=left,
+    numberstyle=\tiny\color{number},
+    numbersep=8pt,
+    keywordstyle=\color{keyword}\bfseries,
+    commentstyle=\color{comment}\itshape,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+    xleftmargin=0.5cm,
+    xrightmargin=0.5cm,
+    aboveskip=8pt,
+    belowskip=8pt
+}
+
+% 带标题的代码框
+\newtcblisting{codeblock}[2][]{
+    breakable,
+    colback=codebg,
+    colframe=codeframe,
+    listing only,
+    listing options={style=pythonstyle},
+    title={\textbf{#2}},
+    #1
+}
+
+\newtcblisting{bashblock}[2][]{
+    breakable,
+    colback=codebg,
+    colframe=codeframe,
+    listing only,
+    listing options={style=bashstyle},
+    title={\textbf{#2}},
+    #1
+}
+
+% ============================================================
+% 自定义命令
+% ============================================================
+\newcommand{\Pz}{P^{z}}
+\newcommand{\tsep}{t_{\text{sep}}}
+\newcommand{\QCD}{\Lambda_{\text{QCD}}}
+\newcommand{\hR}{\tilde{h}_R}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\physeq}{\ensuremath{\longleftrightarrow}}
+\newcommand{\refpaper}[1]{参考文献[\ref{#1}]}
+
+% ============================================================
+% 标题页
+% ============================================================
+\title{\textbf{非极化胶子PDF的格点QCD计算}\\[0.3cm]
+       \large huangcl代码的物理公式与程序实现对应分析}
+\author{张鑫 \\ 中国科学院近代物理研究所}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+本文对 huangcl 编写的非极化胶子 Parton Distribution Function (PDF) 格点计算代码
+(\texttt{examples/huangcl/code.py}) 进行系统的物理分析。
+我们从大动量有效理论 (LaMET) 出发，逐层建立物理公式与程序实现之间的对应关系，
+涵盖场强张量的格点离散化、非定域胶子算符的 OPE 构造、蒸馏法核子两点关联函数、
+非连通三点关联函数的分解、比值方法、以及 Jackknife 重采样误差分析。
+每个物理公式均附有对应的 Python 实现，使物理图像与编程图像清晰对照。
+
+\textbf{关键词：}胶子 PDF，LaMET，格点 QCD，场强张量，非连通图，OPE，Jackknife
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ============================================================
+% 第一章：引言
+% ============================================================
+\section{引言}
+
+\subsection{物理动机}
+
+理解核子内部的部分子结构是强子物理的核心问题之一。
+胶子携带核子约 40--50\% 的动量，其部分子分布函数 (gluon PDF) $g(x,\mu)$
+在高能散射过程中起着关键作用。
+然而，胶子 PDF 的非微扰计算长期以来是一个巨大的挑战。
+
+光锥 PDF 的原始定义为 Minkowski 空间中的光锥关联函数\cite{gluon_pdf_derivation}：
+\begin{equation}\label{eq:lightcone_pdf}
+x g(x, \mu) = \int \frac{dz^{-}}{2\pi P^{+}} e^{-i x P^{+} z^{-}}
+    \langle P | F^{+\mu}_{a}(z^{-}) \, U_{ab}(z^{-}, 0) \,
+    F^{b\mu}_{+}(0) (\mu) | P \rangle,
+\end{equation}
+其中 $U_{ab}(z^{-}, 0) = \mathcal{P}\exp[ig\int_{0}^{z^{-}} d\eta^{-} A^{+}(\eta^{-})]_{ab}$
+为伴随表示中的 Wilson 线。
+由于该定义涉及光锥时间 $z^{-}$，无法直接在 Euclidean 格点上计算。
+
+\subsection{大动量有效理论 (LaMET)}
+
+LaMET 由季向东于 2013 年提出\cite{lamet_original}，
+通过在有限大动量 $P^{z}$ 下计算 Euclidean 空间的 quasi-PDF，
+然后通过微扰匹配将其转换为光锥 PDF。
+LaMET 因子化公式为\cite{gluon_pdf_derivation}：
+\begin{equation}\label{eq:lamet_factorization}
+x \tilde{g}(x, \Pz) = \int_{-\infty}^{\infty} \frac{dy}{|y|}
+    C^{\text{hybrid}}\left(\frac{x}{y}, \lambda_s, \frac{\mu}{y\Pz}\right)
+    \, y g(y, \mu) + \mathcal{O}\left(\frac{\QCD^{2}}{(x\Pz)^{2}},
+    \frac{\QCD^{2}}{((1-x)\Pz)^{2}}\right).
+\end{equation}
+
+Quasi-PDF 由重整化后的格点矩阵元 Fourier 变换得到：
+\begin{equation}\label{eq:quasi_pdf}
+x \tilde{g}(x, \Pz) = \frac{1}{\mathcal{N}} \int \frac{dz}{2\pi\Pz}
+    e^{-i x z \Pz} \, \hR(z, \Pz).
+\end{equation}
+
+\subsection{胶子PDF格点计算的关键挑战}
+
+与夸克 PDF 不同，胶子 PDF 的格点计算面临以下独特困难：
+\begin{enumerate}
+    \item \textbf{非连通图 (Disconnected Diagrams)：}
+        胶子算符不通过任何夸克传播子与核子连接，
+        三点函数分解为核子两点函数与胶子 OPE 算符的乘积。
+
+    \item \textbf{场强张量的格点构造：}
+        胶子算符由场强张量 $F_{\mu\nu}$ 构建，
+        需要在格点上通过 plaquette/Clover 叶构造。
+
+    \item \textbf{Wilson 线的重整化：}
+        非定域胶子算符中的空间 Wilson 线存在线性发散，
+        需要特殊的混合方案重整化。
+
+    \item \textbf{信噪比问题：}
+        胶子算符的涨落远大于夸克算符，
+        对统计精度和涂抹技术提出了更高要求。
+\end{enumerate}
+
+\subsection{本文结构}
+
+第\ref{sec:physics}节建立完整的物理框架；
+第\ref{sec:fmunu}节详述场强张量的格点构造及其代码实现；
+第\ref{sec:ope}节阐述非定域胶子 OPE 算符的构造；
+第\ref{sec:two_point}节介绍蒸馏法核子两点关联函数；
+第\ref{sec:three_point}节推导非连通三点函数、比值方法与 Jackknife 重采样；
+第\ref{sec:huangcl}节对 huangcl 的 \texttt{code.py} 进行完整的逐段分析；
+第\ref{sec:workflow}节总结完整计算流程；
+最后为附录，列出所有参考源。
+
+
+% ============================================================
+% 第二章：物理基础
+% ============================================================
+\section{物理基础：非极化胶子PDF的理论框架}\label{sec:physics}
+
+\subsection{光锥胶子PDF}
+
+光锥胶子PDF由 twist-2 光锥算符的 forward 矩阵元定义\cite{note_of_gluon_PDFs}。
+在光锥规范 $A^{+}=0$ 下，非极化胶子 PDF 的最简形式为：
+\begin{equation}\label{eq:gluon_pdf_lightcone}
+x g(x) = \frac{1}{2} \int \frac{dz^{-}}{2\pi P^{+}} e^{-i x P^{+} z^{-}}
+    \langle P | F^{+\mu}(z^{-}) F_{+\mu}(0) | P \rangle.
+\end{equation}
+
+\subsection{光锥关联函数的张量分解}
+
+协变形式下，胶子矩阵元可参数化为\cite{note_of_gluon_PDFs, gluon_pdf_derivation}：
+\begin{equation}\label{eq:M_munu}
+M_{\mu\alpha; \lambda\beta}(z, p) = \langle p |
+    F_{\mu\alpha}(z) \, W[z, 0] \, F_{\lambda\beta}(0) \, W[0, z] | p \rangle.
+\end{equation}
+
+通过 Lorentz 协变性，$M_{\mu\alpha;\lambda\beta}$ 可分解为六个独立的标量振幅函数。
+对于非极化情况，twist-2 贡献来自不变振幅 $M_{pp}$：
+\begin{equation}\label{eq:Mpp_relation}
+g^{\alpha\beta} M_{+\alpha; \beta+}(z, p)
+    = g^{ij} M_{+i; j+}(z, p)
+    = -2 p_{+}^{2} \, M_{pp}(\nu, 0),
+\end{equation}
+其中 Ioffe 时间 $\nu = p_{3} z_{3}$。
+
+\subsection{不变振幅与胶子PDF的关系}
+
+$M_{pp}$ 是胶子 PDF 的 Fourier 变换\cite{note_of_gluon_PDFs}：
+\begin{equation}\label{eq:Mpp_pdf}
+- M_{pp}(\nu) = \frac{1}{2} \int_{-1}^{1} dx \, e^{-i x \nu} \, x g(x).
+\end{equation}
+
+这就是格点可计算量与连续光锥 PDF 之间的核心桥梁。
+
+\subsection{非极化胶子算符的组合}
+
+为了提取 $M_{pp}$，需要特定的 $M_{\mu\alpha;\lambda\beta}$ 线性组合。
+在 Minkowski 空间中，非极化胶子流算符为\cite{note_of_gluon_PDFs}：
+\begin{equation}\label{eq:Og_minkowski}
+O^{(0)}_{g}(z) = \Big[ F^{0i}(z) W[z,0] F_{0i}(0) W[0,z]
+    + 2 F^{12}(z) W[z,0] F_{12}(0) W[0,z] \Big]_{\text{Mink}}.
+\end{equation}
+
+利用 Minkowski--Euclidean 对应关系
+$F^{(M)}_{0i} F^{(M)}_{0i} = -F^{(E)}_{0i} F^{(E)}_{0i}$ 和
+$F^{(M)}_{ij} F^{(M)}_{ij} = F^{(E)}_{ij} F^{(E)}_{ij}$，
+得到 Euclidean 空间的表达式\cite{gluon_pdf_derivation, 场强张量}：
+\begin{equation}\label{eq:Og_euclidean}
+\boxed{
+O^{(0)}_{g}(z) = \Big[ -F_{0i}(z) W[z,0] F_{0i}(0) W[0,z]
+    + 2 F_{12}(z) W[z,0] F_{12}(0) W[0,z] \Big]_{\text{Eucl}}.
+}
+\end{equation}
+
+\subsection{非连通三点关联函数}
+
+由于胶子算符不通过夸克线连接核子，
+三点函数分解为非连通的乘积形式\cite{gluon_pdf_derivation}：
+\begin{equation}\label{eq:C3pt_disc}
+\boxed{
+C_{\text{3pt}}(z, \Pz, \tsep, t)
+    = \frac{1}{N_t} \sum_{t_0}
+    \big\langle (O_g(z, t_0+t) - \langle O_g(z) \rangle)
+    (C^{N}_{\text{2pt}}(\Pz, t_0+\tsep, t_0) - \langle C^{N}_{\text{2pt}} \rangle) \big\rangle.
+}
+\end{equation}
+
+其中 $C^{N}_{\text{2pt}}$ 为核子两点关联函数，
+$\langle \cdot \rangle$ 表示系综平均。
+真空减除 (vacuum subtraction) 是消除非连通真空贡献的关键步骤。
+
+\subsection{比值方法}
+
+为消除源-汇重叠因子，构造三点与两点的比值\cite{gluon_pdf_derivation, 关联函数}：
+\begin{equation}\label{eq:ratio_def}
+\boxed{
+R(\Pz; \tsep, t) \equiv \frac{C_{\text{3pt}}(\Pz; \tsep, t)}
+    {C_{\text{2pt}}(\Pz; \tsep)}.
+}
+\end{equation}
+
+在大时间分离极限下，激发态污染可通过两态截断描述：
+\begin{equation}\label{eq:ratio_fit}
+\boxed{
+R(\Pz; \tsep, t) \approx c_0 + c_1 e^{-\Delta E (\tsep - t)}
+    + c_1 e^{-\Delta E t},
+}
+\end{equation}
+其中 $c_0$ 即为所需的裸 quasi-矩阵元 $\langle 0 | O_g(z) | 0 \rangle$，
+$\Delta E = E_1 - E_0$ 为基态与第一激发态的能隙。
+
+
+% ============================================================
+% 第三章：场强张量
+% ============================================================
+\section{格点上的场强张量 $F_{\mu\nu}$}\label{sec:fmunu}
+
+\subsection{连续统场强张量}
+
+在连续统 Yang-Mills 理论中，场强张量定义为协变导数的对易子\cite{场强张量}：
+\begin{equation}\label{eq:F_continuum}
+F_{\mu\nu}(x) = -\frac{i}{g} [D_{\mu}(x), D_{\nu}(x)],
+\qquad D_{\mu}(x) = \partial_{\mu} + i g A_{\mu}(x),
+\end{equation}
+其分量为：
+\begin{equation}
+F^{a}_{\mu\nu} = \partial_{\mu} A^{a}_{\nu}
+    - \partial_{\nu} A^{a}_{\mu}
+    - g f^{abc} A^{b}_{\mu} A^{c}_{\nu}.
+\end{equation}
+
+\subsection{链变量与Plaquette}
+
+格点规范理论的基本自由度是链变量 (link variable)\cite{场强张量}：
+\begin{equation}\label{eq:link}
+U_{\mu}(x) = \exp(i a A_{\mu}(x)).
+\end{equation}
+
+最小的规范不变闭合回路是 plaquette (小 Wilson 环)：
+\begin{equation}\label{eq:plaquette}
+\boxed{
+P_{\mu\nu}(x) = U_{\mu}(x) U_{\nu}(x+\hat{\mu})
+    U^{\dagger}_{\mu}(x+\hat{\nu}) U^{\dagger}_{\nu}(x).
+}
+\end{equation}
+
+通过 Baker-Campbell-Hausdorff (BCH) 展开到 $\mathcal{O}(a^{2})$：
+\begin{equation}\label{eq:plaquette_bch}
+P_{\mu\nu} = \exp\Big[ i a^{2} \big( \partial_{\mu} A_{\nu}
+    - \partial_{\nu} A_{\mu} + i [A_{\mu}, A_{\nu}] \big)
+    + \mathcal{O}(a^{3}) \Big]
+    = 1 + i a^{2} F_{\mu\nu} + \mathcal{O}(a^{3}).
+\end{equation}
+
+\subsection{代码实现：Plaquette}
+
+\begin{codeblock}{Operator.py --- plaquette\_new 函数}
+def plaquette_new(gauge, mu, nu, Nt, Nx):
+    """
+    Compute P_{mu,nu}(x) = U_mu(x) U_nu(x+mu) U_mu^dag(x+nu) U_nu^dag(x)
+
+    gauge shape: [t, z, y, x, dir, color, color]  (donghx convention)
+    """
+    pla = np.einsum(
+        "tzyxab,tzyxbc->tzyxac",
+        gauge[:, :, :, :, mu, :, :],
+        np.roll(gauge, -1, 3 - mu)[:, :, :, :, nu, :, :],
+    )
+    #  U_mu(x) * U_nu(x+mu)
+
+    pla = np.einsum(
+        "tzyxab,tzyxcb->tzyxac",
+        pla,
+        np.roll(gauge, -1, 3 - nu)[:, :, :, :, mu, :, :].conj(),
+    )
+    #  * U_mu^dag(x+nu)
+
+    pla = np.einsum(
+        "tzyxab,tzyxcb->tzyxac",
+        pla,
+        gauge[:, :, :, :, nu, :, :].conj(),
+    )
+    #  * U_nu^dag(x)
+
+    return pla
+\end{codeblock}
+
+\textbf{物理--代码对应：}
+\begin{itemize}
+    \item \texttt{gauge[:,:,:,:,mu,:,:]} $\longleftrightarrow$ $U_{\mu}(x)$
+    \item \texttt{np.roll(gauge, -1, 3-mu)[:,:,:,:,nu,:,:]} $\longleftrightarrow$
+        $U_{\nu}(x+\hat{\mu})$
+    \item \texttt{np.roll(gauge, -1, 3-nu)[:,:,:,:,mu,:,:].conj()} $\longleftrightarrow$
+        $U^{\dagger}_{\mu}(x+\hat{\nu})$
+    \item \texttt{gauge[:,:,:,:,nu,:,:].conj()} $\longleftrightarrow$
+        $U^{\dagger}_{\nu}(x)$
+    \item \texttt{np.einsum("tzyxab,tzyxbc->tzyxac", ...)} $\longleftrightarrow$
+        颜色空间的 $3\times 3$ 矩阵乘法
+\end{itemize}
+
+\subsection{Clover叶构造}
+
+为了减小离散化误差并降低统计涨落，
+采用 Clover 叶 (四个共面 plaquette 的平均)\cite{场强张量, gluon_pdf_derivation}：
+\begin{equation}\label{eq:clover}
+\boxed{
+Q_{\mu\nu}(x) = P_{\mu\nu}(x)
+    - P_{\nu,-\mu}(x)
+    + P_{-\nu,\mu}(x)
+    + P_{-\mu,-\nu}(x).
+}
+\end{equation}
+
+四个 plaquette 分别对应：
+\begin{itemize}
+    \item $P_{\mu\nu}$ (右上)：$(\mu, \nu)$ 正方向 plaquette
+    \item $-P_{\nu,-\mu}$ (左上)：$(\nu, -\mu)$ 方向 plaquette
+    \item $+P_{-\nu,\mu}$ (左下)：$(-\nu, \mu)$ 方向 plaquette
+    \item $+P_{-\mu,-\nu}$ (右下)：$(-\mu, -\nu)$ 方向 plaquette
+\end{itemize}
+
+Clover 叶的性质\cite{场强张量}：
+\begin{itemize}
+    \item 反对称性：$Q_{\nu\mu} = -Q_{\mu\nu}$
+    \item 消除奇次离散化误差，领头阶误差为 $\mathcal{O}(a^{4})$
+\end{itemize}
+
+\subsection{Clover叶的代码实现}
+
+\begin{codeblock}{Operator.py --- plaquette\_clover\_new 函数}
+def plaquette_clover_new(gauge, mu, nu):
+    """
+    Compute clover term Q_{mu,nu} from four coplanar plaquettes.
+
+    Returns anti-hermitian field strength operator:
+    F_{mu,nu}^{clover} = -i/8 * (Q_{mu,nu} - Q_{nu,mu})
+    """
+    # 四个偏移的 plaquette
+    gauge_rightup = gauge
+    gauge_leftup  = np.roll(gauge, 1, 3 - mu)
+    gauge_rightdown = np.roll(gauge, 1, 3 - nu)
+    gauge_leftdown  = np.roll(gauge_leftup, 1, 3 - nu)
+
+    # P_{mu,nu}  -- 右上
+    pla_rightup = (compute 4-link products as in plaquette_new)
+
+    # -P_{nu,-mu}  -- 左上 (负号来自方向反转)
+    pla_leftup = (compute plaquette for (nu, -mu) direction)
+
+    # +P_{-nu,mu}  -- 左下
+    pla_leftdown = (compute plaquette for (-nu, mu) direction)
+
+    # +P_{-mu,-nu}  -- 右下
+    pla_rightdown = (compute plaquette for (-mu, -nu) direction)
+
+    # 反对称化: Q - Q^dag
+    ans = (pla_rightup  - pla_rightup.conj().transpose(0,1,2,3,5,4)
+         + pla_leftup   - pla_leftup.conj().transpose(0,1,2,3,5,4)
+         + pla_leftdown - pla_leftdown.conj().transpose(0,1,2,3,5,4)
+         + pla_rightdown - pla_rightdown.conj().transpose(0,1,2,3,5,4))
+
+    return -1j * ans / 8.0  # <-- F_{mu,nu} = -i/(8a^2) * (Q - Q^dag)
+\end{codeblock}
+
+\textbf{物理--代码对应：}
+\begin{itemize}
+    \item \texttt{pla\_rightup} $\longleftrightarrow$ $P_{\mu\nu}$
+    \item \texttt{pla\_leftup} $\longleftrightarrow$ $-P_{\nu,-\mu}$
+    \item \texttt{pla\_leftdown} $\longleftrightarrow$ $+P_{-\nu,\mu}$
+    \item \texttt{pla\_rightdown} $\longleftrightarrow$ $+P_{-\mu,-\nu}$
+    \item \texttt{X - X.conj().transpose(...5,4)} $\longleftrightarrow$
+        $Q_{\mu\nu} - Q_{\nu\mu}$ (颜色矩阵反对称化)
+    \item \texttt{-1j * ans / 8.0} $\longleftrightarrow$
+        $-\frac{i}{8a^{2}}(Q_{\mu\nu} - Q_{\nu\mu})$ (因子 $1/a^{2}$ 在物理单位中恢复)
+\end{itemize}
+
+\subsection{全部 ($\mu$, $\nu$) 平面的Clover叶}
+
+\begin{codeblock}{Operator.py --- plaquette\_clover\_all\_new 函数}
+def plaquette_clover_all_new(gauge, Nt, Nx):
+    """
+    Compute F_{mu,nu} for all 4x4 (mu,nu) combinations.
+    Returns shape: [4, 4, Nt, Nz, Ny, Nx, 3, 3]
+
+    Diagonal (mu == nu) entries are zero-padded.
+    """
+    pla = np.zeros((4, 4, Nt, Nx, Nx, Nx, 3, 3), dtype=complex)
+    for _mu in range(4):
+        for _nu in range(4):
+            if _mu == _nu:
+                pla[_mu, _nu] = Temp_zeros   # F_{mu,mu} = 0
+            else:
+                pla[_mu, _nu] = plaquette_clover_new(gauge, _mu, _nu)
+    return pla
+\end{codeblock}
+
+输出形状为 \texttt{[4, 4, Nt, Nz, Ny, Nx, 3, 3]}，前两个维度对应 $(\mu,\nu)$
+索引。$\mu, \nu \in \{0,1,2,3\}$ 对应方向 $\{x, y, z, t\}$。
+
+\subsection{对偶场强张量 $\tilde{F}_{\mu\nu}$}
+
+对于部分胶子自旋算符的构造，需要用到对偶场强张量\cite{gluon_pdf_derivation}：
+\begin{equation}
+\tilde{F}^{\mu\nu} \equiv \frac{1}{2} \epsilon^{\mu\nu\rho\sigma} F_{\rho\sigma},
+\end{equation}
+其中 $\epsilon^{0123} = 1$。
+
+代码中使用预先计算的 Levi-Civita 张量 \texttt{Tensor4}：
+\begin{codeblock}{Operator.py --- plaquette\_clover\_all\_tilde 函数}
+# Tensor4[i,j,k,l] = (1/2) * epsilon_{i,j,k,l}
+# (zero if any indices coincide, +/-1/2 for even/odd permutations)
+Tensor4 = np.zeros((4, 4, 4, 4), dtype=complex)
+for i,j,k,l in itertools.product(range(4), repeat=4):
+    if len({i,j,k,l}) != 4:  # 有重复指标 -> 0
+        Tensor4[i,j,k,l] = 0
+    else:
+        sign = (+1 if parity of permutation is even else -1)
+        Tensor4[i,j,k,l] = 0.5 * sign
+
+def plaquette_clover_all_tilde(pla_all, Nt, Nx):
+    pla_tilde = contract(
+        "opmn,mntzyxab->optzyxab",  # 1/2 * epsilon contraction
+        Tensor4,
+        pla_all,
+    )
+    return pla_tilde
+\end{codeblock}
+
+\textbf{物理--代码对应：}
+\begin{itemize}
+    \item \texttt{Tensor4[o,p,m,n]} $\longleftrightarrow$
+        $\frac{1}{2} \epsilon^{opmn}$
+    \item \texttt{contract("opmn,mntzyxab->optzyxab", ...)} $\longleftrightarrow$
+        $\tilde{F}^{op} = \frac{1}{2} \epsilon^{opmn} F_{mn}$
+\end{itemize}
+
+
+% ============================================================
+% 第四章：非定域胶子OPE算符
+% ============================================================
+\section{非定域胶子OPE算符的构造}\label{sec:ope}
+
+\subsection{格点上的OPE算符}
+
+在格点上，非定域胶子 OPE 算符定义为\cite{gluon_pdf_derivation}：
+\begin{equation}\label{eq:ope_lattice}
+\boxed{
+\mathcal{M}^{\mu\lambda, \nu\rho}(z)
+    = \sum_{\vec{x}} \Tr \Big[ F^{\mu\lambda}(\vec{x} + z\hat{z}) \,
+        U(\vec{x} + z\hat{z}, \vec{x}) \,
+        F^{\nu\rho}(\vec{x}) \,
+        U(\vec{x}, \vec{x} + z\hat{z}) \Big],
+}
+\end{equation}
+其中 $U(\vec{x} + z\hat{z}, \vec{x})$ 是沿 $z$ 方向连接两个场强插入点的
+空间 Wilson 线（由 $\hat{z}$ 方向的 link 变量乘积构成）。
+
+\subsection{自旋平均的非极化算符}
+
+非极化胶子 PDF 所需的乘性可重整化组合为\cite{gluon_pdf_derivation}：
+\begin{equation}\label{eq:O_renormalizable}
+\boxed{
+\mathcal{O}(z) = \mathcal{M}^{tx; tx}(z)
+    + \mathcal{M}^{ty; ty}(z)
+    - 2 \mathcal{M}^{xy; xy}(z).
+}
+\end{equation}
+
+这个特定组合保证了所有三项共享相同的单圈 UV 反常维度，
+从而整个算符是乘性可重整化的（至少在单圈水平上）\cite{gluon_pdf_derivation}。
+
+根据 Minkowski-Euclidean 对应关系：
+\begin{align}
+F^{(M)}_{ti} F^{(M)}_{ti} &= -F^{(E)}_{ti} F^{(E)}_{ti}, \\
+F^{(M)}_{ij} F^{(M)}_{ij} &= +F^{(E)}_{ij} F^{(E)}_{ij}.
+\end{align}
+
+因此在 Euclidean 格点上\cite{note_of_gluon_PDFs, 场强张量}：
+\begin{equation}\label{eq:O_euclidean_expanded}
+\boxed{
+\mathcal{O}(z)_{\text{Eucl}} \equiv
+    -\mathcal{M}^{ti; ti}(z)
+    + 2 \mathcal{M}^{ij; ij}(z).
+}
+\end{equation}
+
+对 $z$ 方向为 $z$ 的情况，展开为：
+\begin{equation}\label{eq:O_euclidean_components}
+\mathcal{O}(z)_{\text{Eucl}} = -\mathcal{M}^{30;30}(z)
+    - \mathcal{M}^{31;31}(z)
+    + 2 \mathcal{M}^{01;01}(z).
+\end{equation}
+
+\subsection{OPE算符的MPI并行构造}
+
+在 \texttt{Calc\_ope\_unpol.py} 中，MPI 的 4 个 rank 分别计算不同指标组合：
+
+\begin{table}[H]
+\centering
+\caption{MPI rank 与 OPE 算符分量的对应关系 (Wilson线沿 $z$ 方向)}
+\begin{tabular}{c|c|c|c|l}
+\toprule
+\textbf{Rank} & $\bm{\mu}$ & $\bm{\nu}$ & $\bm{(\mu,\nu)}$ 平面 & \textbf{物理意义} \\
+\midrule
+0 & 3 ($t$)  & 0 ($x$) & $t$-$x$ & $\mathcal{M}^{30;30}$ (电场 $E_x$) \\
+1 & 3 ($t$)  & 1 ($y$) & $t$-$y$ & $\mathcal{M}^{31;31}$ (电场 $E_y$) \\
+2 & 0 ($x$)  & 1 ($y$) & $x$-$y$ & $\mathcal{M}^{01;01}$ (磁场 $B_z$) \\
+3 & --- & --- & --- & 空闲 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{核心函数：operators\_new\_z0\_mu2}
+
+\begin{codeblock}{Operator.py --- operators\_new\_z0\_mu2 函数 (简化)}
+def operators_new_z0_mu2(gauge, zdir, pla, pla_tilde,
+                          delta_z, mu, nu, mu2, nu2, Nt):
+    """
+    Compute O(z) = Tr[ F_{mu,nu}(z) * W^dag * Ftilde_{mu2,nu2}(0) * W ]
+
+    zdir: Wilson line direction (0=x, 1=y, 2=z)
+    pla:  F_{mu,nu} from clover construction
+    pla_tilde: \tilde{F}_{mu,nu} = (1/2) * epsilon * F
+    """
+    z_dir = zdir
+
+    # Step 1: Shift F_{mu,nu} from z=0 to z=delta_z
+    ope = np.roll(pla[mu, nu], -delta_z, 3 - z_dir)
+    # ope shape: [Nt, Nz, Ny, Nx, 3, 3]
+
+    # Step 2: Backward Wilson line from z=delta_z to z=0
+    #    W^dag(z,0) = U_z^dag(delta_z-1) * ... * U_z^dag(0)
+    for _dz in range(delta_z):
+        ope = np.einsum(
+            "tzyxab,tzyxcb->tzyxac",
+            ope,
+            np.roll(gauge, -(delta_z - 1 - _dz), 3 - z_dir)
+              [:, :, :, :, z_dir, :, :].conj(),
+        )
+    # 每个 einstein sum: ope * U_z^dag(step)  (颜色矩阵乘法)
+    # 注意: .conj() = 厄米共轭 = U^dag
+
+    # Step 3: Insert Ftilde_{mu2,nu2} at z=0
+    ope = np.einsum(
+        "tzyxab,tzyxbc->tzyxac",
+        ope,
+        pla_tilde[mu2, nu2],
+    )
+    # ope = ope * Ftilde(0)
+
+    # Step 4: Forward Wilson line from z=0 back to z=delta_z
+    #    W(0,z) = U_z(0) * U_z(1) * ... * U_z(delta_z-1)
+    for _dz in range(delta_z):
+        ope = np.einsum(
+            "tzyxab,tzyxbc->tzyxac",
+            ope,
+            np.roll(gauge, -_dz, 3 - z_dir)
+              [:, :, :, :, z_dir, :, :],
+        )
+    # 每个 einstein sum: ope * U_z(step)
+
+    # Step 5: Color trace and spatial sum
+    ans = np.trace(ope, axis1=4, axis2=5)  # Tr_color
+    # ans shape: [Nt, Nz, Ny, Nx]
+    op = np.sum(ans, axis=(1, 2, 3))       # sum over spatial volume
+    # op shape: [Nt]
+
+    return op
+\end{codeblock}
+
+\textbf{物理--代码对应的图示：}
+
+代码中 operator 构造的图形表示为：
+\begin{center}
+\begin{tabular}{c}
+$F_{\mu\nu}(z)$ at $z = \delta_z$ \\
+$\downarrow$ \texttt{np.roll(pla[mu,nu], -delta\_z, ...)} \\
+\framebox{$F_{\mu\nu}(z)$ shifted to $z=\delta_z$} \\
+$\downarrow$ \texttt{for loop: ope * U\_z.conj()} \\
+\framebox{向后Wilson线 $W^{\dagger}(z,0)$：从 $z=\delta_z$ 到 $0$} \\
+$\downarrow$ \texttt{einsum: ope * pla\_tilde[mu2,nu2]} \\
+\framebox{插入 $\tilde{F}_{\mu_2\nu_2}(0)$ at $z=0$} \\
+$\downarrow$ \texttt{for loop: ope * U\_z} \\
+\framebox{向前Wilson线 $W(0,z)$：从 $0$ 回到 $z=\delta_z$} \\
+$\downarrow$ \texttt{np.trace(axis1=4, axis2=5)} \\
+\framebox{颜色求迹 $\Tr_c[\cdots]$} \\
+$\downarrow$ \texttt{np.sum(axis=(1,2,3))} \\
+\framebox{空间求和 $\sum_{\vec{x}}$ → $\mathcal{O}(t; z)$}
+\end{tabular}
+\end{center}
+
+\subsection{数据格式}
+
+OPE 算符的输出格式为：
+\begin{itemize}
+    \item \textbf{文件名：} \texttt{ops\_mu\{mu\}\_nu\{nu\}\_dz\{delta\_z\}\_conf\{conf\_id\}.npy}
+    \item \textbf{形状：} \texttt{[Nt, delta\_z]}（huancl加载后仅保留 \texttt{ops} 键的 \texttt{[Nt]} 数组）
+    \item \textbf{含义：} 每个时间片 $t \in [0, N_t-1]$ 上，空间体积求和后的 OPE 算符值
+\end{itemize}
+
+
+% ============================================================
+% 第五章：核子两点关联函数
+% ============================================================
+\section{核子两点关联函数：蒸馏法}\label{sec:two_point}
+
+\subsection{蒸馏法概述}
+
+蒸馏法 (distillation) 是一种将费米子场投影到三维规范协变 Laplacian 算符
+的低本征模子空间上的涂抹方法\cite{distillation, 蒸馏方法}。
+其核心优势在于：
+
+\begin{enumerate}
+    \item \textbf{低秩近似：} 使用 $N_{\text{ev}} \ll N_c \times V$ 个本征矢量，
+        使所有传播子矩阵元可计算
+    \item \textbf{保持对称性：} 涂抹算符与格点对称群对易
+    \item \textbf{因子化结构：} 关联函数分解为 perambulator（传播子）和
+        elemental（插值算符）的收缩
+    \item \textbf{动量涂抹：} 可在蒸馏框架内自然实现 boosted 强子的动量涂抹
+\end{enumerate}
+
+\subsection{蒸馏算符}
+
+三维规范协变 Laplacian 定义在时间片 $t$ 上\cite{蒸馏方法}：
+\begin{equation}\label{eq:laplacian}
+-\nabla^{2}_{xy}(t) = 6\delta_{xy}
+    - \sum_{j=1}^{3} \big[ \tilde{U}_j(x,t) \delta_{x+\hat{j},y}
+    + \tilde{U}^{\dagger}_j(x-\hat{j},t) \delta_{x-\hat{j},y} \big].
+\end{equation}
+
+求解本征值问题：
+\begin{equation}
+-\nabla^{2}(t) \, v^{(k)}(t) = \lambda_k(t) \, v^{(k)}(t),
+\qquad v^{(k)\dagger} v^{(l)} = \delta_{kl}.
+\end{equation}
+
+蒸馏算符定义为最低 $N_{\text{ev}}$ 个本征矢量的投影\cite{蒸馏方法}：
+\begin{equation}\label{eq:distillation_op}
+\boxed{
+\Box_{xy}(t) = \sum_{k=1}^{N_{\text{ev}}} v^{(k)}_x(t) v^{(k)\dagger}_y(t)
+    \equiv V(t) V^{\dagger}(t).
+}
+\end{equation}
+
+\subsection{Perambulator}
+
+Perambulator 编码了蒸馏空间中的夸克传播\cite{蒸馏方法}：
+\begin{equation}\label{eq:perambulator}
+\boxed{
+\tau^{(p,\bar{p})}_{\alpha\beta}(t', t) =
+    V^{(p)\dagger}(t') \, M^{-1}_{\alpha\beta}(t', t) \, V^{(\bar{p})}(t),
+}
+\end{equation}
+其中 $M^{-1}$ 是格点 Dirac 算符的逆，$\alpha,\beta$ 是 Dirac 旋量指标。
+
+Perambulator 的形状为 \texttt{[Nt, 4, 4, Nev, Nev]}，分别对应
+汇时间 $t'$、汇自旋、源自旋、汇本征模、源本征模。
+
+\subsection{核子插值算符}
+
+标准质子插值算符为\cite{关联函数}：
+\begin{equation}\label{eq:nucleon_interp}
+N_{\alpha}(\vec{P}; t) = \sum_{\vec{x}} e^{-i\vec{x}\cdot\vec{P}}
+    \epsilon^{abc} (u^{T}_a C\gamma_5\gamma_t d_b) u_{c,\alpha}(\vec{x}; t).
+\end{equation}
+
+宇称投影算符 $P^{+} = \frac{1}{2}(1 + \gamma_t)$ 提取正宇称态。
+
+\subsection{蒸馏法核子两点函数的Wick收缩}
+
+在蒸馏框架下，核子两点函数的收缩由 VVV 张量和 perambulator 完成。
+对于质子的 $uud$ 结构，有两个贡献项\cite{蒸馏方法}：
+
+\begin{align}
+C^{(2)}_{B}(t', t) &= \Phi^{(i,j,k)}(t')
+    \, \tau^{(i,\bar{i})}_{d}(t',t)
+    \, \tau^{(j,\bar{j})}_{u}(t',t)
+    \, \tau^{(k,\bar{k})}_{u}(t',t)
+    \, \Phi^{(\bar{i},\bar{j},\bar{k})*}(t) \\
+    &\quad - \Phi^{(i,j,k)}(t')
+    \, \tau^{(i,\bar{i})}_{d}(t',t)
+    \, \tau^{(j,\bar{k})}_{u}(t',t)
+    \, \tau^{(k,\bar{j})}_{u}(t',t)
+    \, \Phi^{(\bar{i},\bar{j},\bar{k})*}(t). \nonumber
+\end{align}
+
+第一项是直接收缩，第二项来自 $u$ 夸克交换（费米子符号）。
+
+\subsection{动量涂抹}
+
+动量涂抹通过给本征矢量附加动量相关的相位实现\cite{distillation}：
+\begin{equation}\label{eq:mom_smear}
+\tilde{\xi}^{(k)}_{a}(\vec{z}, t) = e^{i\vec{\zeta}\cdot\vec{z}}
+    \, \xi^{(k)}_{a}(\vec{z}, t),
+\end{equation}
+其中涂抹动量 $\vec{\zeta} = \zeta \times (2\pi/L)\hat{z}$，
+$\zeta$ 为整数涂抹相位参数。
+
+\subsection{2pt数据格式}
+
+huangcl 代码加载的 2pt 数据来自 donghx 的蒸馏计算：
+\begin{itemize}
+    \item \textbf{文件名：}
+        \texttt{twopt\_slice\_pp\_Px0Py0Pz2\_eginphase2\_Cg5g4\_nopol\_ss\_conf\{conf\_id\}.npy}
+    \item \textbf{形状：} \texttt{[Nt, Nt]} $=$ \texttt{[t\_snk, t\_src]}
+    \item \textbf{含义：} 正宇称投影后的核子两点关联函数
+        $C_{\text{2pt}}(t_{\text{snk}}, t_{\text{src}}; \vec{P})$
+    \item \textbf{参数：} $P_z = 2$ (动量), moms smear phase = 2,
+        插值器 \texttt{Cg5g4} $= C\gamma_5\gamma_4$
+\end{itemize}
+
+
+% ============================================================
+% 第六章：非连通三点关联函数与比值方法
+% ============================================================
+\section{非连通三点关联函数与比值方法}\label{sec:three_point}
+
+\subsection{非连通三点函数的构造}
+
+回顾公式 (\ref{eq:C3pt_disc})：
+\begin{equation*}
+C_{\text{3pt}}(z, \Pz, \tsep, t) =
+    \frac{1}{N_t} \sum_{t_0}
+    \big\langle \delta O_g(z, t_0+t) \;
+    \delta C^{N}_{\text{2pt}}(\Pz, t_0+\tsep, t_0) \big\rangle,
+\end{equation*}
+其中 $\delta X \equiv X - \langle X \rangle$ 表示真空减除。
+
+\subsection{huangcl代码中的数据结构}
+
+代码加载以下数据：
+\begin{enumerate}
+    \item \textbf{2pt 关联函数} \texttt{\_corr[Nconf, Nt, Nt]}：
+        $C_{\text{2pt}}(t_{\text{snk}}, t_{\text{src}})$
+
+    \item \textbf{OPE 算符分量}（各 \texttt{[Nconf, Nx, Nt]}）：
+        \begin{itemize}
+            \item \texttt{\_ope\_01}：$\mathcal{O}_{\mu=0,\nu=1}(t)$
+                -- $F_{01}$ (磁场 $B_z$) 的双线性
+            \item \texttt{\_ope\_30}：$\mathcal{O}_{\mu=3,\nu=0}(t)$
+                -- $F_{30}$ (电场 $E_x$) 的双线性
+            \item \texttt{\_ope\_31}：$\mathcal{O}_{\mu=3,\nu=1}(t)$
+                -- $F_{31}$ (电场 $E_y$) 的双线性
+        \end{itemize}
+\end{enumerate}
+
+\subsection{OPE线性组合}
+
+代码第89行执行：
+\begin{codeblock}{code.py --- OPE 组合 (line 89)}
+_ope = -_ope_30 - _ope_31 + 2 * _ope_01
+\end{codeblock}
+
+这精确对应公式 (\ref{eq:O_euclidean_components})：
+\begin{equation*}
+\mathcal{O}(z)_{\text{Eucl}} = -\mathcal{M}^{30;30}(z)
+    - \mathcal{M}^{31;31}(z)
+    + 2 \mathcal{M}^{01;01}(z).
+\end{equation*}
+
+\textbf{符号验证：}
+\begin{itemize}
+    \item Minkowski 非极化算符：
+        $O_g^{(0)} = F^{0i}F_{0i} + 2F^{12}F_{12}$ （两项均为正）
+    \item Wick 转动：$F^{0i}_{(M)}F^{(M)}_{0i} = -F^{0i}_{(E)}F^{(E)}_{0i}$，
+        故 $F^{0i}_{(M)}F^{(M)}_{0i} \to -F^{0i}_{(E)}F^{(E)}_{0i}$
+    \item 因此 Euclidean：$O_g^{(0)} = -F_{30}F_{30} - F_{31}F_{31} + 2F_{01}F_{01}$
+    \item 代码：\texttt{- \_ope\_30 - \_ope\_31 + 2 * \_ope\_01} ✓
+\end{itemize}
+
+\subsection{时间平移与相对时间表示}
+
+关联函数需要从绝对时间表示转换为相对时间表示。
+定义源时间 $t_i$，汇时间 $t_i + \Delta t$，算符插入时间 $t_i + \Delta\tau$：
+
+\begin{codeblock}{code.py --- 时间平移 (lines 92--104)}
+max_t = 20  # maximum source-sink separation
+
+# 初始化相对时间数组
+_corr2_rel = np.zeros((Nconf, Nt, max_t), dtype=complex)
+#  [conf, ti(source time), dt = t_snk - t_src]
+
+_ope_rel = np.zeros((Nconf, Nt, max_t, Nx), dtype=complex)
+#  [conf, ti, dtau = t_ins - t_src, z]
+
+for ti in range(Nt):
+    # 2pt: 从绝对时间 (t_snk, t_src=ti) 转换为相对时间 (ti, dt)
+    corr2_shift = np.roll(_corr[:, :, ti], shift=-ti, axis=1)
+    _corr2_rel[:, ti, :] = corr2_shift[:, :max_t]
+
+    # OPE: 从绝对时间 (t, z) 转换为相对时间 (ti, dtau, z)
+    ope_shift = np.roll(_ope, shift=-ti, axis=1)
+    _ope_rel[:, ti, :, :] = ope_shift[:, :max_t, :]
+\end{codeblock}
+
+\textbf{物理--代码对应：}
+\begin{itemize}
+    \item \texttt{ti} $\longleftrightarrow$ 源时间 $t_0$
+    \item \texttt{dt} $\longleftrightarrow$ 源-汇分离 $t_{\text{sep}} = t_{\text{snk}} - t_0$
+    \item \texttt{dtau} $\longleftrightarrow$ 算符插入时间 $t = t_{\text{ins}} - t_0$
+    \item \texttt{np.roll(..., shift=-ti)} $\longleftrightarrow$
+        时间平移，使 $t_0$ 对齐到 $t=0$
+    \item \texttt{[:max\_t]} $\longleftrightarrow$ 最大时间分离截断
+\end{itemize}
+
+\subsection{非连通三点函数的构造}
+
+\begin{codeblock}{code.py --- 3pt 构造 (lines 106--114)}
+_corr3 = np.zeros((Nconf, Nt, max_t, max_t, Nx), dtype=complex)
+# [conf, ti, dt, dtau, z]
+
+for dt in range(max_t):       # source-sink separation
+    for dtau in range(dt + 1): # operator insertion time
+        c2_slice = _corr2_rel[:, :, dt]
+        # shape: [conf, ti]  -- C_2pt at fixed dt for all ti
+
+        ope_slice = _ope_rel[:, :, dtau, :]
+        # shape: [conf, ti, z]  -- OPE at fixed dtau for all ti
+
+        c3_instance = ope_slice * c2_slice[:, :, np.newaxis]
+        # shape: [conf, ti, z]  -- O_g(z, ti+dtau) * C_2pt(ti+dt, ti)
+
+        _corr3[:, :, dt, dtau, :] = c3_instance
+\end{codeblock}
+
+\textbf{物理--代码对应：}
+\begin{itemize}
+    \item \texttt{c2\_slice[:,:,dt]} $\longleftrightarrow$
+        $C_{\text{2pt}}(t_0 + \Delta t, t_0; \vec{P})$
+    \item \texttt{ope\_slice[:,:,dtau,:]} $\longleftrightarrow$
+        $\mathcal{O}_g(z, t_0 + \Delta\tau)$
+    \item \texttt{c3\_instance = ope\_slice * c2\_slice[:,:,np.newaxis]} $\longleftrightarrow$
+        $\mathcal{O}_g(z, t_0+\Delta\tau) \times C_{\text{2pt}}(t_0+\Delta t, t_0)$
+    \item 这是公式 (\ref{eq:C3pt_disc}) 的被积函数
+        （在求平均和真空减除之前）
+\end{itemize}
+
+\subsection{重采样：Jackknife方法}
+
+\begin{codeblock}{code.py --- resample 函数 (lines 53--64)}
+def resample(corr, jack, Nsample):
+    n_conf = corr.shape[0]
+    if jack:
+        # Jackknife: 依次省略每个组态
+        re_corr = (n_conf * corr.mean(0) - corr) / (n_conf - 1)
+    else:
+        # Bootstrap: 有放回随机重采样
+        rng = np.random.default_rng(seed=seed)
+        idx = rng.integers(0, n_conf, size=(Nsample, n_conf))
+        re_corr = corr[idx].mean(1)
+    return re_corr
+\end{codeblock}
+
+\textbf{Jackknife 公式：}
+\begin{equation}\label{eq:jackknife}
+\boxed{
+C^{(i)}_{\text{JK}} = \frac{N C_{\text{full}} - C_i}{N - 1},
+}
+\end{equation}
+其中 $C_{\text{full}} = \frac{1}{N} \sum_i C_i$，
+$C_i$ 为第 $i$ 个组态上的观测量，
+$C^{(i)}_{\text{JK}}$ 为省略第 $i$ 个组态后的 Jackknife 样本。
+
+Jackknife 误差公式：
+\begin{equation}\label{eq:jackknife_error}
+\boxed{
+\sigma_{\text{JK}} = \sqrt{\frac{N-1}{N}
+    \sum_{i=1}^{N} (C^{(i)}_{\text{JK}} - \bar{C}_{\text{JK}})^2},
+}
+\end{equation}
+其中 $\bar{C}_{\text{JK}} = \frac{1}{N} \sum_i C^{(i)}_{\text{JK}}$。
+
+代码中 \texttt{sem} 函数实现了这一误差计算：
+\begin{codeblock}{code.py --- sem 函数 (lines 46--50)}
+def sem(data, jack):
+    error = data.std(0)
+    if jack:
+        error = error * np.sqrt(data.shape[0] - 1)
+    return error
+\end{codeblock}
+
+\textbf{推导：} 对于 Jackknife 样本 $\{C^{(i)}_{\text{JK}}\}$，
+其标准差与原始样本均值标准差的关系为：
+\begin{equation*}
+\sigma_{\text{JK}} = \sigma_{\text{sample}} \cdot \sqrt{N-1},
+\end{equation*}
+其中 $\sigma_{\text{sample}} = \texttt{data.std(0)}$。
+因此 \texttt{error * np.sqrt(N-1)} 给出正确的 Jackknife 误差。
+
+\subsection{非连通减除与比值}
+
+\begin{codeblock}{code.py --- 非连通减除与比值 (lines 127--132)}
+# 非连通减除：减去 OPE 平均值 × 2pt 平均值 (真空贡献)
+corr3_disc = (
+    corr3 - corr2[:, :, :, np.newaxis, np.newaxis]
+          * ope[:, :, np.newaxis, :, :]
+)
+# shape: [Nsample, ti, dt, dtau, z]
+
+# 比值：对 ti 求平均
+ratio = np.mean(
+    (corr3_disc / corr2[:, :, :, np.newaxis, np.newaxis]),
+    axis=1
+)
+# shape: [Nsample, dt, dtau, z]
+\end{codeblock}
+
+\textbf{物理--代码对应：}
+
+\begin{enumerate}
+    \item \texttt{corr3\_disc} $\longleftrightarrow$ 公式 (\ref{eq:C3pt_disc}) 的分子：
+        \begin{equation*}
+        C^{\text{disc}}_{\text{3pt}} = \langle O_g \cdot C_{\text{2pt}} \rangle
+            - \langle O_g \rangle \cdot \langle C_{\text{2pt}} \rangle
+        \end{equation*}
+        这正是连接部分：$\langle (O_g - \langle O_g \rangle)
+        (C_{\text{2pt}} - \langle C_{\text{2pt}} \rangle) \rangle$
+
+    \item \texttt{ratio} $\longleftrightarrow$ 公式 (\ref{eq:ratio_def})：
+        \begin{equation*}
+        R(\Delta t, \Delta\tau, z) = \frac{1}{N_t} \sum_{t_i}
+            \frac{C^{\text{disc}}_{\text{3pt}}(t_i; \Delta t, \Delta\tau, z)}
+                 {C_{\text{2pt}}(t_i; \Delta t)}
+        \end{equation*}
+        对源时间 $t_i$ 的平均利用了时间平移不变性。
+\end{enumerate}
+
+
+% ============================================================
+% 第七章：huangcl代码完整分析
+% ============================================================
+\section{huangcl \texttt{code.py} 完整剖析}\label{sec:huangcl}
+
+\subsection{代码结构总览}
+
+huangcl 的 \texttt{code.py}（约 219 行）实现了一个完整的
+非极化胶子 PDF 分析流程。其结构如下：
+
+\begin{enumerate}
+    \item \textbf{配置参数} (lines 1--24)：格点参数、动量、统计方法
+    \item \textbf{数据分配} (lines 39--43)：初始化存储数组
+    \item \textbf{统计工具函数} (lines 46--64)：sem() 和 resample()
+    \item \textbf{数据加载} (lines 71--84)：加载 2pt 和 OPE 数据
+    \item \textbf{OPE 组合} (line 89)：线性组合为总 OPE 算符
+    \item \textbf{时间平移} (lines 92--104)：绝对时间→相对时间
+    \item \textbf{3pt 构造} (lines 106--114)：2pt 与 OPE 的乘积
+    \item \textbf{内存清理} (lines 116--117, 124--125, 134--135)
+    \item \textbf{重采样} (lines 120--122)：Jackknife
+    \item \textbf{非连通减除与比值} (lines 127--132)
+    \item \textbf{绘图} (lines 147--207)：ratio vs $\Delta\tau - \Delta t/2$
+    \item \textbf{性能监控} (lines 210--216)：峰值内存
+\end{enumerate}
+
+\subsection{格点参数}
+
+\begin{codeblock}{code.py --- 参数配置 (lines 11--24)}
+conf_name = "beta6.20_mu-0.2770_ms-0.2400_L24x72"
+conf_short = "L24x72"
+Nconf = 200    # 组态数量
+Nt = 72        # 时间方向格点数
+Nx = 24        # 空间方向格点数
+
+Px = 0         # x方向动量 (2π/L 单位)
+Py = 0         # y方向动量
+Pz = 2         # z方向动量 (P^z = 2 × 2π/L)
+
+test = False   # 测试模式 (仅3个组态)
+jack = True    # 使用 Jackknife 重采样
+Nsample = 3000 # Bootstrap样本数 (仅 jack=False 时使用)
+\end{codeblock}
+
+\textbf{物理参数：}
+\begin{itemize}
+    \item \textbf{规范系综：} $\beta = 6.20$, $m_u = m_d = -0.2770$, $m_s = -0.2400$,
+        $24^3 \times 72$ 格点
+    \item \textbf{格距：} $a \approx 0.105$ fm
+    \item \textbf{核子动量：} $P_z = 2 \times 2\pi/(24a) \approx 0.49$ GeV
+    \item \textbf{组态数：} 200 个组态，间隔 200 轨迹（组态 ID: 6250, 6450, ..., 46050）
+\end{itemize}
+
+\subsection{数据加载详解}
+
+\begin{codeblock}{code.py --- 数据加载 (lines 71--84)}
+for i in range(Nconf):
+    conf_id = 6250 + i * 200  # 组态ID: 6250--46050, 步长200
+
+    # 2pt 关联函数: C_2pt(t_snk, t_src)
+    _corr[i] = np.load(
+        f".../2pt_Result/{conf_name}/momsmear2z/{conf_id}/"
+        f"twopt_slice_pp_Px{Px}Py{Py}Pz{Pz}_eginphase2"
+        f"_Cg5g4_nopol_ss_conf{conf_id}.npy"
+    )
+    # shape: [Nt, Nt] -- [t_snk, t_src]
+
+    # OPE: mu=0, nu=1 (F_01, 磁场 B_z 分量)
+    _ope_01[i] = np.load(
+        f".../Ope_Gluon/Result_hpy_4D_10times/{conf_short}/zdir/{conf_id}/"
+        f"ops_mu0_nu1_dz24_conf{conf_id}.npz"
+    )["ops"]
+    # shape: [Nx, Nt] -- [z, t]
+
+    # OPE: mu=3, nu=0 (F_30, 电场 E_x 分量)
+    _ope_30[i] = np.load(
+        f".../Ope_Gluon/Result_hpy_4D_10times/{conf_short}/zdir/{conf_id}/"
+        f"ops_mu3_nu0_dz24_conf{conf_id}.npz"
+    )["ops"]
+
+    # OPE: mu=3, nu=1 (F_31, 电场 E_y 分量)
+    _ope_31[i] = np.load(
+        f".../Ope_Gluon/Result_hpy_4D_10times/{conf_short}/zdir/{conf_id}/"
+        f"ops_mu3_nu1_dz24_conf{conf_id}.npz"
+    )["ops"]
+\end{codeblock}
+
+\textbf{数据来源对应关系：}
+
+\begin{table}[H]
+\centering
+\caption{huangcl 加载的数据与其生成代码的对应关系}
+\begin{tabular}{c|c|l}
+\toprule
+\textbf{数据} & \textbf{形状} & \textbf{生成代码} \\
+\midrule
+2pt 关联函数 & \texttt{[Nt, Nt]} &
+    \texttt{donghx/2pt\_proton\_Cg5gmu\_L24x72\_mom2\_zdir\_gpu.py} \\
+OPE $\mu=0,\nu=1$ & \texttt{[Nx, Nt]} &
+    \texttt{donghx/Calc\_ope\_unpol.py} (rank 2)\\
+OPE $\mu=3,\nu=0$ & \texttt{[Nx, Nt]} &
+    \texttt{donghx/Calc\_ope\_unpol.py} (rank 0)\\
+OPE $\mu=3,\nu=1$ & \texttt{[Nx, Nt]} &
+    \texttt{donghx/Calc\_ope\_unpol.py} (rank 1)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{完整的数据流图}
+
+下图总结了从原始数据到最终 ratio 的完整张量流：
+
+\begin{center}
+\fbox{
+\begin{minipage}{0.92\textwidth}
+\textbf{输入数据：}
+\begin{itemize}
+    \item \texttt{\_corr} \texttt{[Nconf, Nt, Nt]}：$C_{\text{2pt}}(t_{\text{snk}}, t_{\text{src}})$
+    \item \texttt{\_ope\_\{01,30,31\}} \texttt{[Nconf, Nx, Nt]}：
+        $\mathcal{O}_{\mu\nu}(z, t)$
+\end{itemize}
+
+\bigskip
+\hrule
+\bigskip
+
+\textbf{步骤 1 --- OPE 组合 (line 89)：}
+\begin{itemize}
+    \item \texttt{\_ope = -\_ope\_30 - \_ope\_31 + 2 * \_ope\_01}
+    \item \texttt{\_ope} \texttt{[Nconf, Nt, Nx]} (转置后)：
+        $\mathcal{O}_g(z, t) = -\mathcal{M}^{30;30} - \mathcal{M}^{31;31} + 2\mathcal{M}^{01;01}$
+\end{itemize}
+
+\bigskip
+\hrule
+\bigskip
+
+\textbf{步骤 2 --- 时间平移 (lines 99--104)：}
+\begin{itemize}
+    \item \texttt{\_corr2\_rel[:, ti, dt]} =
+        $C_{\text{2pt}}(t_i + \Delta t, t_i)$
+    \item \texttt{\_ope\_rel[:, ti, dtau, z]} =
+        $\mathcal{O}_g(z, t_i + \Delta\tau)$
+\end{itemize}
+
+\bigskip
+\hrule
+\bigskip
+
+\textbf{步骤 3 --- 3pt 构造 (lines 109--114)：}
+\begin{itemize}
+    \item \texttt{\_corr3[:, ti, dt, dtau, z]} =
+        $\mathcal{O}_g(z, t_i+\Delta\tau) \times C_{\text{2pt}}(t_i+\Delta t, t_i)$
+\end{itemize}
+
+\bigskip
+\hrule
+\bigskip
+
+\textbf{步骤 4 --- Jackknife (lines 120--122)：}
+\begin{itemize}
+    \item 对 \texttt{\_corr2\_rel}, \texttt{\_ope\_rel}, \texttt{\_corr3} 分别重采样
+\end{itemize}
+
+\bigskip
+\hrule
+\bigskip
+
+\textbf{步骤 5 --- 非连通减除与比值 (lines 127--132)：}
+\begin{itemize}
+    \item \texttt{corr3\_disc = corr3 - corr2 * ope}
+    \item \texttt{ratio = mean(corr3\_disc / corr2, axis=1)} (对 $t_i$ 平均)
+    \item \texttt{ratio} \texttt{[Nsample, dt, dtau, z]}：
+        $R(\Delta t, \Delta\tau, z)$
+\end{itemize}
+\end{minipage}
+}
+\end{center}
+
+\subsection{绘图分析}
+
+\begin{codeblock}{code.py --- 绘图段 (lines 147--207)}
+target_z = 2          # 选择 z = 2 (Wilson线长度为2a)
+dt_list = [4,5,6,7,8,9,10]  # 源-汇分离
+
+ratio_mean = ratio.mean(0)  # 对 Jackknife 样本求平均
+ratio_err  = sem(ratio, jack)
+
+for i, dt in enumerate(dt_list):
+    tau_vals = np.arange(0, dt + 1)
+
+    # 横坐标: tau - dt/2  (算子插入时间相对于中点)
+    x_vals = tau_vals - dt / 2.0
+
+    # 纵坐标: R(dt, dtau, z=2)
+    y_vals = ratio_mean[dt, tau_vals, target_z]
+    y_errs = ratio_err[dt, tau_vals, target_z]
+
+    ax.errorbar(x_vals, y_vals, yerr=y_errs,
+                fmt="x", label=f"z={target_z}, tsep={dt}")
+\end{codeblock}
+
+\textbf{物理意义：}
+\begin{itemize}
+    \item \textbf{横坐标：} $\Delta\tau - \Delta t/2$ —— 算符插入时间相对于源-汇中点的偏移。
+        当 $\Delta\tau = \Delta t/2$（中点）时，激发态污染最小。
+    \item \textbf{纵坐标：} $R(\Delta t, \Delta\tau, z)$ ——
+        在特定 Wilson 线长度 $z$ 下的裸矩阵元估计。
+    \item \textbf{不同曲线：} 对应不同的源-汇分离 $\Delta t$。
+        在 $\Delta t \to \infty$ 极限下，所有曲线应趋于相同的平台值 $c_0$。
+    \item \textbf{平台行为：} 在 $\Delta\tau - \Delta t/2 \approx 0$ 附近，
+        $R$ 应该对 $\Delta\tau$ 呈现平台，表明基态饱和。
+\end{itemize}
+
+\subsection{内存管理}
+
+代码中有三次显式的 \texttt{del} + \texttt{gc.collect()} 操作：
+
+\begin{codeblock}{code.py --- 内存管理 (代表性段)}
+# 第一次清理 (lines 116--117):
+# 三维数组 _corr[Nconf,Nt,Nt] 和四个 OPE 分量不再需要
+del _corr, _ope, _ope_30, _ope_31, _ope_01
+gc.collect()
+
+# 第二次清理 (lines 124--125):
+# 原始数据已被重采样，清除未重采样的数组
+del _corr2_rel, _ope_rel, _corr3
+gc.collect()
+
+# 第三次清理 (lines 134--135):
+# 重采样后的 corr3, corr2, ope 不再需要
+del corr3, corr2, ope, corr3_disc
+gc.collect()
+\end{codeblock}
+
+\textbf{内存估算（每个组态阶段）：}
+\begin{itemize}
+    \item \texttt{\_corr}: $200 \times 72 \times 72 \times 16$ bytes $\approx 16.6$ MB
+    \item \texttt{\_corr3}: $200 \times 72 \times 20 \times 20 \times 24 \times 16$ bytes
+        $\approx 2.2$ GB
+\end{itemize}
+
+这解释了为什么代码需要在中间步骤清理内存——\texttt{\_corr3} 占据了大量内存。
+
+
+% ============================================================
+% 第八章：完整计算流程
+% ============================================================
+\section{完整计算工作流}\label{sec:workflow}
+
+\subsection{端到端工作流}
+
+非极化胶子 PDF 的完整格点计算流程如图\ref{fig:workflow}所示。
+
+\begin{figure}[H]
+\centering
+\fbox{
+\begin{minipage}{0.92\textwidth}
+\small
+\textbf{Phase 1: 数据生成 (donghx 代码, 在GPU集群上运行)}
+
+\begin{enumerate}
+    \item 读取 ILDG 格式的规范组态 $\{U_\mu(x)\}$
+    \item 构造 Clover 叶 $\to F_{\mu\nu}(x)$ (所有 $(\mu,\nu)$ 平面)
+    \item 计算对偶场强 $\tilde{F}_{\mu\nu} = \frac{1}{2}\epsilon_{\mu\nu\rho\sigma}F^{\rho\sigma}$
+    \item 构造非定域 OPE 算符 $\mathcal{O}_{\mu\nu}(z,t)$
+        (含 Wilson 线 $W[z,0]$)
+    \item MPI 并行：rank 0/1/2 分别计算三组 $(\mu,\nu)$ 分量
+    \item 输出：\texttt{ops\_mu\{mu\}\_nu\{nu\}\_dz24\_conf\{id\}.npz}
+\end{enumerate}
+
+\medskip
+\textbf{Phase 2: 蒸馏计算 (donghx 代码, 在GPU集群上运行)}
+
+\begin{enumerate}
+    \item 求解 3D Laplacian 本征值问题 $\to$ $\{v^{(k)}(t)\}_{k=1}^{N_{\text{ev}}}$
+    \item 动量涂抹本征矢量 $\tilde{v}^{(k)}(\vec{x},t) = e^{i\vec{\zeta}\cdot\vec{x}} v^{(k)}(\vec{x},t)$
+    \item 计算 perambulator $\tau(t',t)$ (夸克传播子在蒸馏空间的投影)
+    \item 计算 VVV 张量 (核子算符的蒸馏构造)
+    \item Wick 收缩 + 宇称投影 $\to C_{\text{2pt}}(t_{\text{snk}}, t_{\text{src}})$
+    \item 输出：\texttt{twopt\_slice\_pp\_...\_nopol\_ss\_conf\{id\}.npy}
+\end{enumerate}
+
+\medskip
+\textbf{Phase 3: 分析 (huangcl \texttt{code.py}, 在CPU节点上运行)}
+
+\begin{enumerate}
+    \item 加载所有组态的 2pt 和 OPE 数据
+    \item OPE 线性组合 $\mathcal{O}_g = -\mathcal{O}_{30} - \mathcal{O}_{31} + 2\mathcal{O}_{01}$
+    \item 绝对时间 $\to$ 相对时间
+    \item 构造非连通 3pt：
+        $C_{\text{3pt}} = \mathcal{O}_g(z, t_i+\Delta\tau) \times C_{\text{2pt}}(t_i+\Delta t, t_i)$
+    \item Jackknife 重采样
+    \item 真空减除 + 比值：
+        $R = \langle (C_{\text{3pt}} - \langle C_{\text{3pt}}\rangle) / C_{\text{2pt}} \rangle_{t_i}$
+    \item 绘制 ratio 图：$R(z, \Delta t, \Delta\tau)$ vs $\Delta\tau - \Delta t/2$
+\end{enumerate}
+
+\medskip
+\textbf{Phase 4: 后续分析 (未包含在 huangcl 代码中)}
+
+\begin{enumerate}
+    \item 两态拟合 $R \approx c_0 + c_1 e^{-\Delta E(\Delta t - \Delta\tau)} + c_1 e^{-\Delta E \Delta\tau}$
+    \item 提取 $c_0(z)$ = 裸 quasi-矩阵元
+    \item 混合方案重整化
+    \item Fourier 变换 $\to$ quasi-PDF $\tilde{g}(x, \Pz)$
+    \item LaMET 匹配 $\to$ 光锥 PDF $g(x, \mu)$
+    \item 连续极限 + 无限动量外推
+\end{enumerate}
+\end{minipage}
+}
+\caption{非极化胶子 PDF 的完整格点计算工作流}
+\label{fig:workflow}
+\end{figure}
+
+\subsection{关键物理量总结}
+
+\begin{table}[H]
+\centering
+\caption{代码中的核心物理量与 Python 数组的对应关系}
+\begin{tabular}{c|c|l}
+\toprule
+\textbf{符号} & \textbf{Python 数组} & \textbf{含义} \\
+\midrule
+$U_\mu(x)$ & \texttt{gauge[t,z,y,x,mu,c1,c2]} & 规范链变量 \\
+$F_{\mu\nu}(x)$ & \texttt{pla[mu,nu,t,z,y,x,c1,c2]} & 场强张量 (Clover) \\
+$\tilde{F}_{\mu\nu}(x)$ & \texttt{pla\_tilde[mu,nu,...]} & 对偶场强张量 \\
+$\mathcal{O}_{\mu\nu}(z,t)$ & \texttt{\_ope\_\{mn\}[conf,z,t]} & OPE 算符分量 \\
+$\mathcal{O}_g(z,t)$ & \texttt{\_ope[conf,t,z]} & 总 OPE 算符 \\
+$C_{\text{2pt}}(t_s, t_0)$ & \texttt{\_corr[conf,t\_snk,t\_src]} & 核子两点函数 \\
+$C_{\text{2pt}}(t_i; \Delta t)$ & \texttt{\_corr2\_rel[conf,ti,dt]} & 相对时间 2pt \\
+$\mathcal{O}_g(t_i; z, \Delta\tau)$ & \texttt{\_ope\_rel[conf,ti,dtau,z]} & 相对时间 OPE \\
+$C_{\text{3pt}}(t_i; \Delta t, \Delta\tau, z)$ & \texttt{\_corr3[conf,ti,dt,dtau,z]} & 非连通 3pt \\
+$C^{\text{disc}}_{\text{3pt}}$ & \texttt{corr3\_disc[sample,ti,dt,dtau,z]} & 真空减除后 3pt \\
+$R(\Delta t, \Delta\tau, z)$ & \texttt{ratio[sample,dt,dtau,z]} & 比值 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ============================================================
+% 第九章：总结
+% ============================================================
+\section{总结}\label{sec:summary}
+
+本文系统地分析了 huangcl 编写的非极化胶子 PDF 格点计算代码
+(\texttt{examples/huangcl/code.py})，
+建立了从连续统 QCD 物理公式到具体 Python 实现的完整对应关系。
+
+\textbf{主要要点：}
+
+\begin{enumerate}
+    \item \textbf{场强张量的格点构造：}
+        Plaquette $\to$ Clover 叶 $\to$ $F_{\mu\nu}$ 的离散化路径，
+        其核心代码在 \texttt{Operator.py} 中实现。
+        Clover 叶通过四个共面 plaquette 的反对称化组合，
+        实现了 $\mathcal{O}(a^2)$ 的离散化精度。
+
+    \item \textbf{非定域胶子算符：}
+        $\mathcal{M}^{\mu\lambda,\nu\rho}(z) = \Tr[F^{\mu\lambda}(z) W F^{\nu\rho}(0) W^{\dagger}]$
+        在代码中通过 \texttt{operators\_new\_z0\_mu2} 函数实现，
+        依次执行：(1) 场强偏移、(2) 向后 Wilson 线、
+        (3) 对偶场强插入、(4) 向前 Wilson 线、
+        (5) 颜色求迹 + 空间求和。
+
+    \item \textbf{非极化算符组合：}
+        代码中 \texttt{- \_ope\_30 - \_ope\_31 + 2 * \_ope\_01}
+        精确对应 Euclidean 空间的非极化胶子流
+        $-F_{30}F_{30} - F_{31}F_{31} + 2F_{01}F_{01}$，
+        其符号源于 Minkowski-Euclidean 对应中的 Wick 转动效应。
+
+    \item \textbf{非连通三点函数：}
+        代码通过 $\mathcal{O}_g \times C_{\text{2pt}}$ 的乘积
+        构造非连通三点函数，随后进行 Jackknife 重采样、
+        真空减除和比值计算，最终得到裸矩阵元的统计估计。
+
+    \item \textbf{完整工作流：}
+        donghx 的 GPU 代码生成 OPE 算符和蒸馏 2pt 数据
+        (Phase 1--2)，
+        huangcl 的 CPU 代码加载这些数据并完成
+        比值分析和可视化 (Phase 3)，
+        后续的两态拟合、重整化、Fourier 变换和 LaMET 匹配
+        在 zhangxin 的工作流代码中完成 (Phase 4)。
+
+    \item \textbf{统计方法：}
+        Jackknife 重采样正确处理了组态间的关联，
+        代码中 \texttt{sem} 函数的 $\sqrt{N-1}$ 因子
+        将重采样样本的标准差转换为原始样本的 Jackknife 误差。
+\end{enumerate}
+
+huangcl 的代码虽然紧凑（约 220 行），但完整实现了
+从原始格点数据到裸 quasi-矩阵元比值 $R(\Delta t, \Delta\tau, z)$
+的全部分析流程，是理解非连通胶子三点函数分析的优秀范例。
+
+\subsection{代码物理框架速查表}
+
+\begin{table}[H]
+\centering
+\caption{物理公式 $\leftrightarrow$ huangcl 代码行号速查}
+\begin{tabular}{c|c|c}
+\toprule
+\textbf{物理内容} & \textbf{公式编号} & \textbf{代码行号} \\
+\midrule
+OPE 非极化组合 & (\ref{eq:O_euclidean_components}) & 89 \\
+时间平移 (绝对 $\to$ 相对) & -- & 92--104 \\
+非连通 3pt 构造 & (\ref{eq:C3pt_disc}) & 106--114 \\
+Jackknife 重采样 & (\ref{eq:jackknife}) & 53--64, 120--122 \\
+非连通减除 & (\ref{eq:C3pt_disc}) & 127--129 \\
+比值 $R = C_3/C_2$ & (\ref{eq:ratio_def}) & 130--132 \\
+Jackknife 误差 & (\ref{eq:jackknife_error}) & 46--50 \\
+比值拟合 (两态模型) & (\ref{eq:ratio_fit}) & (后续步骤) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ============================================================
+% 附录：数据路径
+% ============================================================
+\appendix
+\section{数据路径与参考源}
+
+\subsection{集群数据路径}
+
+\begin{table}[H]
+\centering
+\caption{集群上的数据路径}
+\begin{tabular}{c|l}
+\toprule
+\textbf{数据类型} & \textbf{路径模式} \\
+\midrule
+2pt 关联函数 & \texttt{/public/group/lqcd/donghx/2pt\_Result/} \\
+ & \quad \texttt{\{conf\_name\}/momsmear2z/\{conf\_id\}/} \\
+ & \quad \texttt{twopt\_slice\_pp\_...\_nopol\_ss\_conf\{id\}.npy} \\
+\midrule
+OPE 算符 & \texttt{/public/group/lqcd/donghx/Ope\_Gluon/} \\
+ & \quad \texttt{Result\_hpy\_4D\_10times/\{conf\_short\}/zdir/} \\
+ & \quad \texttt{\{conf\_id\}/ops\_mu\{mu\}\_nu\{nu\}\_dz24\_conf\{id\}.npz} \\
+\midrule
+输出 & \texttt{/public/home/zhangxin/lattice-pdf/} \\
+ & \quad \texttt{examples/huangcl/result/ratio.png} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{参考文献}
+
+\begin{thebibliography}{99}
+
+\bibitem{gluon_pdf_derivation}
+张鑫. \textit{胶子 PDF 的理论推导}.
+\texttt{/root/lattice-pdf/文档/gluon\_pdf\_derivation.tex}.
+
+\bibitem{note_of_gluon_PDFs}
+张鑫. \textit{Note of Gluon PDFs}.
+\texttt{/root/lattice-pdf/文档/note\_of\_gluon\_PDFs.tex}.
+
+\bibitem{场强张量}
+张鑫. \textit{格点 QCD 中的场强张量}.
+\texttt{/root/lattice-pdf/补充/格点QCD中的场强张量.tex}.
+
+\bibitem{关联函数}
+张鑫. \textit{格点 QCD 中的关联函数}.
+\texttt{/root/lattice-pdf/补充/格点QCD中的关联函数.tex}.
+
+\bibitem{大动量有效理论}
+张鑫. \textit{格点 QCD 中的大动量有效理论 (LaMET)}.
+\texttt{/root/lattice-pdf/补充/格点QCD中的大动量有效理论.tex}.
+
+\bibitem{蒸馏方法}
+张鑫. \textit{格点 QCD 蒸馏方法解析}.
+\texttt{/root/lattice-pdf/补充/格点QCD蒸馏方法解析.tex}.
+
+\bibitem{光锥PDF}
+张鑫. \textit{格点 QCD 中的光锥 PDF 与 quasi-PDF}.
+\texttt{/root/lattice-pdf/补充/格点QCD中的光锥PDF与quasi\_PDF.tex}.
+
+\bibitem{lamet_original}
+X. Ji, \textit{Parton Physics on a Euclidean Lattice},
+Phys. Rev. Lett. 110, 262002 (2013).
+
+\bibitem{distillation}
+M. Peardon et al. (Hadron Spectrum Collaboration),
+\textit{A Novel Quark-Field Creation Operator Construction for Hadronic Physics in Lattice QCD},
+Phys. Rev. D 80, 054506 (2009).
+
+\bibitem{gluon_pdf_first}
+Z. Fan, Y. Yang, et al.,
+\textit{First Nucleon Gluon PDF from Large Momentum Effective Theory},
+Phys. Rev. Lett. 127, 062002 (2021).
+
+\bibitem{gluon_pdf_continuum}
+Z. Fan et al.,
+\textit{First Self-Renormalized Gluon PDF of Nucleon from Large-Momentum Effective Theory in the Continuum Limit},
+arXiv:2401.xxxx (2024).
+
+\bibitem{hybrid_renorm}
+X. Ji, Y. Liu, et al.,
+\textit{A Hybrid Renormalization Scheme for Quasi Light-Front Correlations in Large-Momentum Effective Theory},
+Nucl. Phys. B 964, 115311 (2021).
+
+\bibitem{claude_md}
+\texttt{/root/lattice-pdf/CLAUDE.md} —— 项目总览与代码约定.
+
+\end{thebibliography}
+
+\subsection{相关代码文件清单}
+
+\begin{table}[H]
+\centering
+\caption{本文引用的源代码文件}
+\begin{tabular}{c|l}
+\toprule
+\textbf{文件} & \textbf{功能} \\
+\midrule
+\texttt{examples/huangcl/code.py} & 本文分析的主体代码 \\
+\texttt{examples/huangcl/submit.sh} & Slurm 作业提交脚本 \\
+\texttt{examples/donghx/Calc\_ope\_unpol.py} & OPE 算符的 MPI 并行计算 \\
+\texttt{examples/donghx/Operator.py} & Plaquette, Clover, OPE 算符核心函数 \\
+\texttt{examples/donghx/2pt\_proton\_Cg5gmu\_L24x72\_mom2\_zdir\_gpu.py} & 蒸馏法核子 2pt 计算 \\
+\texttt{examples/donghx/gamma\_matrix\_cupy\_DR.py} & DeGrand-Rossi 基 gamma 矩阵 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

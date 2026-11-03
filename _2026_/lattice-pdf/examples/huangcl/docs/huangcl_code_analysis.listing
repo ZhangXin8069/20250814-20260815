@@ -1,0 +1,14 @@
+# 第一次清理 (lines 116--117):
+# 三维数组 _corr[Nconf,Nt,Nt] 和四个 OPE 分量不再需要
+del _corr, _ope, _ope_30, _ope_31, _ope_01
+gc.collect()
+
+# 第二次清理 (lines 124--125):
+# 原始数据已被重采样，清除未重采样的数组
+del _corr2_rel, _ope_rel, _corr3
+gc.collect()
+
+# 第三次清理 (lines 134--135):
+# 重采样后的 corr3, corr2, ope 不再需要
+del corr3, corr2, ope, corr3_disc
+gc.collect()
