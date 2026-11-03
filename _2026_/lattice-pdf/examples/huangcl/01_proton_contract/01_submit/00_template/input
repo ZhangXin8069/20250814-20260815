@@ -1,0 +1,11 @@
+Nt =NT=
+Nx =NX=
+conf_id =CONF=
+delta_z 24
+link_dir z
+conf_file /public/group/lqcd/donghx/Hpysmear_=CONF_NAME=/hpy_4D_10times_new/=CONF_NAME=_cfg_=CONF=.lime.contents/msg02.rec04.ildg-binary-data
+output_dir =RESULT_DIR=
+# 24x72: beta6.20_mu-0.2770_ms-0.2400_L24x72    a=0.1053
+# 32x96: beta6.41_mu-0.2295_ms-0.2050_L32x96    a=0.08
+# output_dir /public/group/lqcd/donghx/Ope_Gluon/Result_hpy_4D_10times_xy/$5
+# pla_dir /public/group/lqcd/donghx/Ope_Gluon/Result_hpy_4D_10times/${5}/zdir/${3}
