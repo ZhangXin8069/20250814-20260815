@@ -1,0 +1,3 @@
+﻿2026-07-06T15:58:38.2663699Z Evaluate and set environment url
+2026-07-06T15:58:38.2668859Z Evaluated environment url: https://www.lattice-qcd-at-imp.top/
+2026-07-06T15:58:38.2669907Z Cleaning up orphan processes
