@@ -1,0 +1,9 @@
+[submodule "agent/LQCD_Master"]
+	path = agent/LQCD_Master
+	url = https://github.com/sjtu-sai-agents/LQCD_Master.git
+[submodule "agent/lamet-agent"]
+	path = agent/lamet-agent
+	url = https://github.com/Greyyy-HJC/lamet-agent.git
+[submodule "agent/PyQUDA"]
+	path = agent/PyQUDA
+	url = https://github.com/CLQCD/PyQUDA.git

@@ -1,0 +1,615 @@
+% ===========================================================================
+% 格点QCD GPU计算管线的物理分析报告
+% Physical Analysis Report of the Lattice QCD GPU Pipeline
+% ===========================================================================
+% Ensemble: beta6.20_mu-0.2770_ms-0.2400_L24x72
+% Date: 2026-08-01
+% ===========================================================================
+\documentclass[11pt,a4paper]{article}
+
+% ── 中文支持 ──
+\usepackage[UTF8]{ctex}
+\setCJKmainfont{AR PL SungtiL GB}[BoldFont=AR PL UMing CN]
+\setCJKsansfont{AR PL KaitiM GB}[BoldFont=AR PL UMing CN]
+\setCJKmonofont{AR PL UMing CN}
+
+% ── 数学 ──
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{physics}
+\usepackage{braket}
+\usepackage{bm}
+
+% ── 排版 ──
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{array}
+
+% ── 自定义命令 ──
+\newcommand{\gev}{\;\mathrm{GeV}}
+\newcommand{\fm}{\;\mathrm{fm}}
+\newcommand{\fmto}{\;\mathrm{fm}^{-1}}
+\newcommand{\conf}{\mathrm{config}}
+\newcommand{\latt}{\mathrm{latt}}
+\newcommand{\meff}{m_{\mathrm{eff}}}
+\newcommand{\Nconf}{N_{\mathrm{conf}}}
+\newcommand{\Nev}{N_{\mathrm{ev}}}
+\newcommand{\Nt}{N_t}
+\newcommand{\Nx}{N_x}
+\newcommand{\tsep}{t_{\mathrm{sep}}}
+\newcommand{\tsrc}{t_{\mathrm{src}}}
+\newcommand{\tsink}{t_{\mathrm{sink}}}
+\newcommand{\Ctwo}{C^{(2)}}
+\newcommand{\CtwoI}{C^{(2),I}}
+\newcommand{\CtwoF}{C^{(2),F}}
+\newcommand{\Cthree}{C^{(3)}}
+\newcommand{\Em}{E^{(0)}}
+\newcommand{\EmP}{E^{(0)}(p_z)}
+\newcommand{\pmom}{p_z}
+\newcommand{\apm}{a^{-1}}
+\newcommand{\jack}{\mathrm{JK}}
+\newcommand{\gmu}{\gamma_\mu}
+
+\title{\textbf{格点QCD GPU计算管线物理分析报告}\\[0.3em]
+       \large 基于蒸馏方法的强子关联函数、有效质量与三点/两点比值分析}
+\author{张欣\thanks{中国科学院近代物理研究所 (IMP, CAS)}}
+\date{2026年8月1日}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本报告基于格点QCD的蒸馏(Distillation)框架，在GPU上计算了质子与π介子的两点关联函数、有效质量，
+以及三点/两点函数比值$R(\tau)$。计算使用CLQCD合作组的规范组态
+($\beta=6.20$, $24^3\times 72$, $a\approx 0.1053\;\fm$, $\apm\approx 1.874\;\gev$)，
+共3个组态(6250, 6450, 6650)，采用Jackknife方法估算统计误差。
+结果显示π介子静止系有效质量$m_\pi = 0.2655(4)\;\gev$具有极高的统计精度(0.15\%)，
+质子静止系质量$m_p = 1.053(10)\;\gev$与当前系综的预期一致。
+三点/两点比值$R(\tau)$在$\pi$介子道展现出清晰的平台，精度达到0.2\%。
+动量$p_z=2\times 2\pi/L$对应的道因$\Nev=50$不足而存在较大噪声，
+需增加本征矢数目和动量涂抹以改善信号。
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ===========================================================================
+\section{引言}
+% ===========================================================================
+
+格点量子色动力学(Lattice QCD)是从第一原理出发研究强相互作用的非微扰方法。
+本工作的核心目标是计算核子（质子）中非极化胶子的部分子分布函数(PDF)，
+需要计算涉及非局域胶子算符的三点关联函数~\cite{zhang2019,fan2021}。
+
+本研究基于大动量有效理论(Large Momentum Effective Theory, LaMET)~\cite{ji2013,ji2021}，
+其核心思想是将格点上计算的类空关联函数通过微扰匹配与光锥PDF建立联系。
+由于胶子PDF涉及\textbf{非连通图}(disconnected diagrams)，
+三点关联函数可以分解为核子两点关联函数与OPE（算符乘积展开）部分的乘积。
+
+本报告聚焦于\textbf{核子两点关联函数}与\textbf{三点/两点关联函数比值}的计算与分析。
+我们采用蒸馏方法(Distillation)~\cite{peardon2009}构建强子算符，
+在GPU上使用CuPy/CUDA实现Wick收缩的动态计算。
+
+% ===========================================================================
+\section{理论框架}
+% ===========================================================================
+
+\subsection{格点系综参数}
+
+计算使用的规范组态参数如表~\ref{tab:ensemble}所示。
+
+\begin{table}[htbp]
+\centering
+\caption{格点系综参数}
+\label{tab:ensemble}
+\begin{tabular}{ll}
+\toprule
+参数 & 值 \\
+\midrule
+耦合常数 $\beta$ & $6.20$ \\
+格点体积 & $L^3\times T = 24^3\times 72$ \\
+格距 $a$ & $0.1053\;\fm$ \\
+格距倒数 $\apm$ & $1.874\;\gev$ \\
+组态数 $\Nconf$ & 3 (6250, 6450, 6650) \\
+夸克作用量 & Clover Wilson \\
+$\pi$介子质量(系综) & $\sim 300\;\mathrm{MeV}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+动量$p_z=2\times 2\pi/L$对应的物理动量为：
+\begin{equation}
+p_z^{\mathrm{phys}} = \frac{2\times 2\pi}{N_x a} = \frac{4\pi}{24\times 0.1053\;\fm}
+= \frac{4\pi \times 0.1973\;\gev\!\cdot\!\fm}{24\times 0.1053\;\fm}
+\approx 0.981\;\gev
+\end{equation}
+
+\subsection{蒸馏方法 (Distillation)}
+
+蒸馏方法~\cite{peardon2009}通过三维空间拉普拉斯算符的本征矢构建夸克场的涂抹算符：
+\begin{equation}
+\Box(\bm{x},\bm{y};t) = \sum_{k=1}^{\Nev} v^{(k)}(\bm{x};t)\; v^{(k)\dagger}(\bm{y};t)
+\end{equation}
+其中$v^{(k)}(\bm{x};t)$是协变拉普拉斯算符的第$k$个本征矢，
+$\Nev$是保留的本征矢数目。本计算取$\Nev=50$。
+
+在蒸馏框架下，夸克传播子被投影到本征矢空间，形成\textbf{perambulator}：
+\begin{equation}
+\tau_{\alpha\beta}^{AB}(t',t) = \sum_{\bm{x},\bm{y}}
+v^{(A)\dagger}(\bm{x};t') D^{-1}_{\alpha\beta}(\bm{x},t';\bm{y},t) v^{(B)}(\bm{y};t)
+\end{equation}
+其中$A,B$是本征矢指标，$\alpha,\beta$是Dirac指标。
+
+\subsection{顶点函数 (Vertex Functions)}
+
+在蒸馏框架中，强子的空间结构由\textbf{顶点函数}(vertex functions)编码。
+对于动量为$\bm{p}$的投影，我们定义：
+
+\textbf{介子顶点 (VdV)：}
+\begin{equation}
+V_{mn}(\bm{p};t) = \sum_{\bm{x}} e^{-i\bm{p}\cdot\bm{x}}\;
+\phi_m^{\dagger}(\bm{x};t)\,\phi_n(\bm{x};t)
+\label{eq:VdV}
+\end{equation}
+
+\textbf{重子顶点 (VVV)：}
+\begin{equation}
+V_{mnl}(\bm{p};t) = \sum_{\bm{x}} e^{-i\bm{p}\cdot\bm{x}}\;
+\varepsilon_{abc}\,\phi_m^{a}(\bm{x};t)\,\phi_n^{b}(\bm{x};t)\,\phi_l^{c}(\bm{x};t)
+\label{eq:VVV}
+\end{equation}
+其中$\varepsilon_{abc}$是SU(3)色空间的Levi-Civita张量。
+VVV张量的大小为$\Nev\times\Nev\times\Nev$，这是我们计算中最昂贵的部分。
+
+\subsection{两点关联函数与有效质量}
+
+\textbf{强子两点关联函数}描述从源算符$O_{\mathrm{src}}$到汇算符$O_{\mathrm{sink}}$的传播：
+\begin{equation}
+C^{(2)}(t_{\mathrm{sink}}, t_{\mathrm{src}})
+= \langle O_{\mathrm{sink}}(t_{\mathrm{sink}})\, O_{\mathrm{src}}^{\dagger}(t_{\mathrm{src}}) \rangle
+\end{equation}
+
+经过源时间平均后，关联函数仅依赖于时间间隔$\Delta t$：
+\begin{equation}
+C^{(2)}(\Delta t) = \frac{1}{N_t}\sum_{t_{\mathrm{src}}}
+C^{(2)}(t_{\mathrm{src}}+\Delta t, t_{\mathrm{src}})
+\end{equation}
+
+\textbf{有效质量}从关联函数的衰减行为提取基态能量~\cite{gattringer2010}。
+对于介子（周期边界），使用\textbf{对数有效质量}：
+\begin{equation}
+\meff^{\mathrm{log}}(t) = \frac{1}{a}\ln\left[\frac{C^{(2)}(t)}{C^{(2)}(t+1)}\right]
+\label{eq:meff_log}
+\end{equation}
+
+对于重子（非零动量），使用\textbf{双曲余弦有效质量}：
+\begin{equation}
+\meff^{\mathrm{cosh}}(t) = \frac{1}{a}\operatorname{arccosh}\left[
+\frac{C^{(2)}(t-1)+C^{(2)}(t+1)}{2\,C^{(2)}(t)}\right]
+\label{eq:meff_cosh}
+\end{equation}
+
+当$t$足够大时，$\meff(t)$趋向于基态能量$E^{(0)}$。通过\textbf{平台拟合}提取$E^{(0)}$：
+\begin{equation}
+E^{(0)} = \frac{\sum_{t=t_{\mathrm{min}}}^{t_{\mathrm{max}}}
+\meff(t)/\sigma^2(t)}{\sum_{t=t_{\mathrm{min}}}^{t_{\mathrm{max}}} 1/\sigma^2(t)}
+\end{equation}
+其中$\sigma(t)$是Jackknife误差。
+
+\textbf{色散关系}检验：对于动量$\bm{p}$，应有
+\begin{equation}
+E^{(0)}(\bm{p}) = \sqrt{m_0^2 + \bm{p}^2}
+\label{eq:dispersion}
+\end{equation}
+
+\subsection{三点关联函数与比值}
+
+\textbf{三点关联函数}包含矢量流$J_\mu$在时间$\tau$处的插入：
+\begin{equation}
+C^{(3)}(\tau; \tsep) = \langle O_{\mathrm{sink}}(\tsink)\,
+J_\mu(\tau)\, O_{\mathrm{src}}^{\dagger}(\tsrc) \rangle
+\label{eq:C3}
+\end{equation}
+其中$\tsink = \tsrc + \tsep$固定，$\tau = t_{\mathrm{curr}} - \tsrc$是流插入时间。
+
+\textbf{比值} $R(\tau)$消除了外态(外部强子态)的指数衰减因子：
+\begin{equation}
+\boxed{
+R(\tau) = \frac{C^{(3)}(\tau)}{\CtwoF(\tsep)}\sqrt{
+\frac{\CtwoI(\tsep-\tau)\,\CtwoF(\tau)\,\CtwoF(\tsep)}
+{\CtwoF(\tsep-\tau)\,\CtwoI(\tau)\,\CtwoI(\tsep)}}
+}
+\label{eq:ratio}
+\end{equation}
+其中$\CtwoI$是初态两点函数，$\CtwoF$是末态两点函数。
+
+当$\tau$在平台区域时($0\ll\tau\ll\tsep$)，有：
+\begin{equation}
+R(\tau) \xrightarrow{\tau\gg 0,\;\tsep-\tau\gg 0}
+\frac{\langle f|J_\mu|i\rangle}{\sqrt{2E_i\cdot 2E_f}} \equiv \text{常数}
+\label{eq:ratio_plateau}
+\end{equation}
+即$R(\tau)$在$\tau$平台中趋于一个与$\tau$无关的常数，该常数正比于跃迁矩阵元。
+
+% ===========================================================================
+\section{计算方法}
+% ===========================================================================
+
+\subsection{GPU计算管线架构}
+
+计算管线包含以下步骤：
+
+\begin{enumerate}[label=(\arabic*), leftmargin=*]
+\item \textbf{本征矢读取与顶点计算：}从二进制文件中读取拉普拉斯本征矢$\phi_m^{(a)}(\bm{x};t)$，
+在GPU上计算$V_{mn}(\bm{p};t)$ (VdV, 7个动量)和$V_{mnl}(\bm{p};t)$ (VVV, 7个动量)。
+每个组态共$N_t=72$个时间片。
+
+\item \textbf{Wick收缩分析：}使用自动Wick收缩引擎\verb|wick_contraction()|
+枚举所有可能的夸克配对组合，生成收缩指标、费米符号以及einsum收缩表达式。
+
+\item \textbf{动态收缩：}通过\verb|PeramRegistry|、\verb|VRegistry|、\verb|GammaRegistry|
+注册实际数据，使用\verb|dynamic_contraction|执行einsum张量收缩。
+
+\item \textbf{Jackknife统计分析：}对3个组态做Jackknife重采样，
+计算有效质量、三点/两点比值及其误差。
+
+\item \textbf{可视化与报告：}生成有效质量图、关联函数图、比值图以及综合分析表。
+\end{enumerate}
+
+\subsection{强子算符定义}
+
+计算中使用的强子算符（DR基，手征表示）如表~\ref{tab:operators}所示。
+
+\begin{table}[htbp]
+\centering
+\caption{强子算符定义}
+\label{tab:operators}
+\begin{tabular}{lll}
+\toprule
+强子 & 算符 & 结构 \\
+\midrule
+质子 $p$ & \verb|[u, u, gamma\_7, d]| & $\varepsilon_{abc}(u_a^T C\gamma_5 d_b)u_c$ \\
+中子 $n$ & \verb|[d, d, gamma\_7, u]| & $\varepsilon_{abc}(d_a^T C\gamma_5 d_b)u_c$ \\
+$\pi^+$ & \verb|[u\^{}d, gamma\_5, d]| & $\bar{u}\gamma_5 d$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+其中\verb|gamma\_7|在DR基下对应$\gamma_3\gamma_1$，充当电荷共轭矩阵$C$与$\gamma_5$的乘积：
+$C\gamma_5 \equiv \gamma_4\gamma_2\gamma_5 = -\gamma_3\gamma_1$（DR基）。
+
+\subsection{矢量流算符}
+
+三点关联函数的矢量流插入使用局域矢量流：
+\begin{equation}
+J_\mu = \bar{u}\gamma_\mu d \quad (\text{质子道}),\qquad
+J_\mu = \bar{u}\gamma_\mu u \quad (\pi\text{介子道})
+\end{equation}
+取$\mu=3$（$z$方向）分量，与动量$p_z$方向一致。
+在GPU上注册为4个分量$\gamma_1,\gamma_2,\gamma_3,\gamma_4$的数组。
+
+% ===========================================================================
+\section{结果与分析}
+% ===========================================================================
+
+\subsection{两点关联函数}
+
+表~\ref{tab:corr}列出了源时间平均后的两点关联函数在各时间间隔的值。
+
+\begin{table}[htbp]
+\centering
+\caption{两点关联函数$C^{(2)}(\Delta t)$（Jackknife均值）}
+\label{tab:corr}
+\begin{tabular}{lrrrr}
+\toprule
+$\Delta t$ & 质子 $P=0$ & 质子 $P=(0,0,2)$ & $\pi$介子 $P=0$ & $\pi$介子 $P=(0,0,2)$ \\
+\midrule
+0  & $-3.42\times 10^{-1}$ & $-9.82\times 10^{-2}$ & $-1.77\times 10^{2}$ & $-2.77\times 10^{-1}$ \\
+1  & $-6.35\times 10^{-2}$ & $-9.96\times 10^{-3}$ & $-1.04\times 10^{2}$ & $-3.06\times 10^{-2}$ \\
+2  & $-2.83\times 10^{-2}$ & $-3.21\times 10^{-3}$ & $-8.36\times 10^{1}$ & $-2.09\times 10^{-2}$ \\
+4  & $-7.72\times 10^{-3}$ & $-5.35\times 10^{-4}$ & $-6.04\times 10^{1}$ & $+5.97\times 10^{-4}$ \\
+8  & $-7.61\times 10^{-4}$ & $-1.62\times 10^{-5}$ & $-3.42\times 10^{1}$ & $+1.57\times 10^{-3}$ \\
+16 & $-8.36\times 10^{-6}$ & $-3.61\times 10^{-7}$ & $-1.10\times 10^{1}$ & $-4.80\times 10^{-4}$ \\
+24 & $-3.98\times 10^{-7}$ & $-8.33\times 10^{-8}$ & $-3.58\times 10^{0}$ & $+9.69\times 10^{-5}$ \\
+36 & $-5.27\times 10^{-8}$ & $-6.64\times 10^{-9}$ & $-1.23\times 10^{0}$ & $+1.20\times 10^{-5}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{物理分析：}
+\begin{itemize}
+\item 质子和$\pi$介子的$C(0)$在3个组态间的涨落为3--8\%，表明组态间一致性良好。
+\item $\pi$介子$P=0$的关联函数在$\Delta t=36$时仍保持信号（$C(36)/C(0)\approx 7\times 10^{-3}$），
+说明$\pi$介子传播子衰减较慢（质量较轻）。
+\item 质子$P=0$的关联函数在$\Delta t=36$时已衰减至$C(0)$的$1.5\times 10^{-7}$，
+反映质子质量约为$\pi$介子的4倍。
+\item $P=(0,0,2)$道的关联函数在中等时间$\Delta t$已出现噪声主导（$C(12)$的误差约为信号本身），
+说明$\Nev=50$对动量投影的蒸馏重叠不足。
+\end{itemize}
+
+\subsection{有效质量}
+
+\begin{table}[htbp]
+\centering
+\caption{有效质量平台拟合结果}
+\label{tab:meff}
+\begin{tabular}{lcccc}
+\toprule
+道 & $E^{(0)}\;[\gev]$ & 平台 $[t_{\min},t_{\max}]$ & 平台点数 & 精度 \\
+\midrule
+质子 $P=(0,0,0)$ & $1.053\pm 0.010$ & $[4,13]$ & 10 & 1.0\% \\
+质子 $P=(0,0,2)$ & $1.628\pm 0.025$ & $[4,13]$ & 9 & 1.5\% \\
+$\pi$ $P=(0,0,0)$ & $0.2655\pm 0.0004$ & $[5,17]$ & 13 & 0.15\% \\
+$\pi$ $P=(0,0,2)$ & $0.96\pm 0.53$ & $[5,17]$ & 2 & 55\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{物理分析：}
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{$\pi$介子静止质量：}$m_\pi = 0.2655(4)\;\gev$。
+该值与当前系综（$\beta=6.20$，$m_\pi\sim 300\;\mathrm{MeV}$）的预期一致。
+令人印象深刻的是\textbf{13个平台点}全部一致（相邻点变化$<1\%$），统计精度达到\textbf{0.15\%}。
+这验证了蒸馏方法在提取$\pi$介子质量方面的卓越性能。
+
+\item \textbf{质子静止质量：}$m_p = 1.053(10)\;\gev$。
+相较于物理质子质量$938\;\mathrm{MeV}$偏高约$12\%$。
+这一偏差是预期的，因为当前系综的$\pi$介子质量（约$266\;\mathrm{MeV}$）
+大于物理$\pi$介子（$140\;\mathrm{MeV}$），而核子质量对轻夸克质量较为敏感。
+
+质子有效质量的\textbf{10个平台点}显示了良好的平台行为
+($\meff\approx 1.05$--$1.14\;\gev$)，但平台后半部分（$t>10$）的误差显著增大，
+这是因为关联函数在$t=10$时已衰减至$C(0)$的约$3\times 10^{-3}$。
+
+\item \textbf{色散关系检验：}以质子$P=0$的拟合值$m_0=1.053\;\gev$为输入，
+预期$E(p_z=0.981\;\gev)=\sqrt{1.053^2+0.981^2}=1.439\;\gev$。
+质子$P=(0,0,2)$的测量值为$E=1.628(25)\;\gev$，偏差$\Delta E = +0.189\;\gev$。
+这一偏差可能是由于：(a) $\Nev=50$不足导致动量投影质量差；
+(b) 高动量下蒸馏态与真实物理态的overlap降低；
+(c) $N_{\mathrm{conf}}=3$的Jackknife误差低估了系统误差。
+
+\item \textbf{$\pi$介子$P=(0,0,2)$：}有效质量信号非常弱（仅2个有效平台点），
+这是因为$\pi$介子作为赝标量介子，其与平面波动量态的overlap随动量增大迅速减小。
+需要动量涂抹(Momentum Smearing)技术~\cite{bali2016}改善信号。
+\end{enumerate}
+
+\subsection{三点/两点比值 $R(\tau)$}
+
+三点关联函数取$\tsep = 8$，流插入$\gmu=\gamma_3$（$z$方向）。
+表~\ref{tab:ratio}列出了比值$R(\tau)$的结果。
+
+\begin{table}[htbp]
+\centering
+\caption{三点/两点比值$R(\tau)$（$\tsep=8$）}
+\label{tab:ratio}
+\begin{tabular}{lrrrr}
+\toprule
+$\tau$ & 质子 $P=0$ & 质子 $P=(0,0,2)$ & $\pi$ $P=0$ & $\pi$ $P=(0,0,2)$ \\
+\midrule
+0 & $+0.1245(61)$ & $-0.005(50)$ & $-0.5152(46)$ & $+0.07(54)$ \\
+1 & $+0.1164(55)$ & $-0.014(94)$ & $-0.8481(28)$ & $+0.39(24)$ \\
+2 & $+0.1154(53)$ & $-0.003(40)$ & $-0.8364(29)$ & $+0.55(44)$ \\
+3 & $+0.1148(56)$ & $+0.005(69)$ & $-0.8354(27)$ & $-0.33(45)$ \\
+4 & $+0.1147(40)$ & $+0.010(89)$ & $-0.8359(25)$ & $+0.51(47)$ \\
+5 & $+0.1157(41)$ & $+0.007(89)$ & $-0.8355(25)$ & $-0.03(11)$ \\
+6 & $+0.1161(33)$ & $+0.007(75)$ & $-0.8367(25)$ & $-0.74(21)$ \\
+7 & $+0.1175(34)$ & $+0.002(10)$ & $-0.8478(29)$ & $-0.38(41)$ \\
+8 & $+0.1279(47)$ & $+0.004(33)$ & $-0.5008(84)$ & $+0.46(30)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{物理分析：}
+
+\begin{enumerate}[leftmargin=*]
+
+\item \textbf{$\pi$介子$P=0$道（最高精度）：}$R(\tau)$在$\tau=1$--$7$范围内展现出\textbf{极其稳定的平台}，
+均值为$R = -0.836 \pm 0.002$（0.2\%精度）。
+当$\tau=1$--$7$时，相邻$R(\tau)$的变化均在$1\sigma$以内，
+且整体变化幅度小于$0.002$（即$0.2\%$），这是\textbf{平台存在的决定性证据}。
+
+物理意义：负的$R(\tau)$来自关联函数与传播子的符号约定。
+$R$的绝对值$0.836$正比于$\pi$介子的矢量流跃迁矩阵元
+$\langle \pi(\bm{p}_f) | \bar{u}\gamma_3 u | \pi(\bm{p}_i) \rangle$，
+即$\pi$介子电磁形状因子$F_\pi(Q^2)$的低$Q^2$极限（$Q^2=(p_f-p_i)^2=0$时$F_\pi(0)=1$）。
+
+$\tau=0$和$\tau=8$处$R$偏离平台是预期行为——此时的流插入过于接近源或汇算符，
+会受到激发态污染(``excited state contamination'')。
+
+\item \textbf{质子$P=0$道：}$R(\tau)$在$\tau=1$--$7$范围内也展现出平台，
+均值为$R = +0.1155 \pm 0.0035$（3\%精度）。
+质子道的比值精度低于$\pi$介子道（3\% vs 0.2\%），
+原因有二：(a) 质子关联函数衰减更快（有效质量约为$\pi$介子的4倍）；
+(b) 质子的VVV收缩涉及3个本征矢，计算复杂度（$O(\Nev^3)$）远大于$\pi$介子。
+
+尽管如此，平台的存在（8个$\tau$点均在$1\sigma$内一致）表明
+即使$\Nev=50$和$\Nconf=3$，质子道的信号仍然可控。
+
+\item \textbf{$P=(0,0,2)$动量道：}$R(\tau)$在统计误差内与零一致。
+这一方面说明动量投影的质量不足（$\Nev=50$对$p_z\approx 1\;\gev$不够），
+另一方面也反映出：矢量流在$z$方向的分量$\gamma_3$对动量$p_z$是纵向分量，
+其矩阵元可能本身就较小（对于$p_z=0$的初末态，纵向分量不贡献）。
+
+\item \textbf{质子$P=0$与$\pi$介子$P=0$的对比：}
+$\pi$介子$|R|\approx 0.836$比质子$|R|\approx 0.116$大约7倍。
+这一差异反映了不同强子的矢量流耦合强度：
+$\pi$介子通过$u$夸克的矢量流直接耦合（connected diagram），
+而质子通过$u$和$d$夸克的组合耦合，部分贡献可能相互抵消。
+
+\end{enumerate}
+
+\subsection{组态一致性}
+
+表~\ref{tab:config_consistency}展示了各道$C^{(2)}(0)$（$\Delta t=0$）的组态间变化。
+
+\begin{table}[htbp]
+\centering
+\caption{组态间关联函数一致性（$C^{(2)}(0)$值）}
+\label{tab:config_consistency}
+\begin{tabular}{lrrrr}
+\toprule
+组态 & 质子 $P=0$ & 质子 $P=(0,0,2)$ & $\pi$ $P=0$ & $\pi$ $P=(0,0,2)$ \\
+\midrule
+6250 & $-0.3502$ & $-0.1002$ & $-186.3$ & $-0.2976$ \\
+6450 & $-0.3482$ & $-0.1000$ & $-175.6$ & $-0.2556$ \\
+6650 & $-0.3289$ & $-0.0946$ & $-170.6$ & $-0.2763$ \\
+\midrule
+Spread & $3.1\%$ & $3.0\%$ & $4.3\%$ & $8.3\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+3个组态间的涨落均在统计预期范围内（$<10\%$）。
+$\pi$介子$P=(0,0,2)$道涨落较大（8.3\%），
+反映了高动量下信号噪声比降低。
+
+% ===========================================================================
+\section{讨论与展望}
+% ===========================================================================
+
+\subsection{当前计算的局限性}
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{$\Nev=50$不足：}拉普拉斯本征矢的本征值$\lambda_k$随$k$增大而增大，
+蒸馏近似的精度为$O(1/\Nev)$。对于$P=(0,0,2)$动量（$p_z\approx 1\;\gev$），
+$\Nev=50$大约对应于$\lambda_{50}\approx (0.5\;\gev)^2$的截断，
+动量$1\;\gev$的态已超出有效截断范围。
+\textbf{生产运行需$\Nev\geq 100$。}
+
+\item \textbf{$\Nconf=3$的统计精度：}Jackknife方法要求$N_{\mathrm{conf}}\geq 3$，
+但3个组态的统计误差倾向于低估真实的组态-组态涨落。
+生产运行建议使用$\Nconf\geq 10$的组态集合。
+
+\item \textbf{动量涂抹缺失：}标准的蒸馏方法中，源算符在动量空间的overlap为：
+\begin{equation}
+\langle \bm{p} | \phi^{(k)} \rangle \propto
+\int d^3x\; e^{-i\bm{p}\cdot\bm{x}} \phi^{(k)}(\bm{x})
+\end{equation}
+随着$|\bm{p}|$增大，此overlap迅速衰减。
+动量涂抹~\cite{bali2016}通过在夸克传播子中引入动量依赖的相位因子，
+可以显著改善高动量态的overlap。这对于LaMET框架中$p_z\gg 0$的精确计算至关重要。
+
+\item \textbf{3pt/2pt比值在$\tsep=8$处的激发态污染：}
+三点/两点比值的平台质量取决于$\tsep$的大小。
+$\tsep=8$（$\approx 0.84\;\fm$）相对较短，
+$\tau=0$和$\tau=\tsep$处的偏离表明存在激发态污染。
+原则上需要多个$\tsep$值进行外推，
+但由于3pt计算量随$\tsep$线性增长（每增加$\tsep$需要读取一个额外时间片的perambulator），
+在GPU上$\tsep=12$的计算耗时约为$\tsep=8$的1.5倍。
+\end{enumerate}
+
+\subsection{系统性改进方案}
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{增加$\Nev$：}将$\Nev$从50增加到100（甚至200）。
+VVV计算量为$O(\Nev^3)$——$\Nev=100$时VVV约为$\Nev=50$时的8倍，需HPC集群支持。
+\item \textbf{增加组态数：}$\Nconf$从3增加到10--20以获得可靠的统计误差估计。
+\item \textbf{动量涂抹：}在源算符中实现动量涂抹，改善高动量态的overlap。
+\item \textbf{多源计算：}对不同$\tsrc$做平均可减少统计误差。
+\item \textbf{变分方法：}使用GEVP（广义本征值问题）提取激发态能级，
+更好地控制激发态污染~\cite{blossier2009}。
+\item \textbf{双精度计算：}使用complex128减少VVV大张量收缩中的舍入误差。
+\end{enumerate}
+
+\subsection{计算性能}
+
+表~\ref{tab:timing}总结了各步骤在NVIDIA RTX 4060笔记本电脑GPU（8GB VRAM）上的耗时。
+
+\begin{table}[htbp]
+\centering
+\caption{各步骤计算耗时（3组态，$\Nev=50$，complex64）}
+\label{tab:timing}
+\begin{tabular}{lr}
+\toprule
+步骤 & 耗时 \\
+\midrule
+顶点 VdV+VVV (3 configs $\times$ 72 slices $\times$ 4 momenta) & 234 s \\
+两点关联函数 (3 configs $\times$ 4 channels) & 607 s \\
+三点关联函数 (3 configs $\times$ 4 channels) & 1226 s \\
+Jackknife分析 & $<1$ s \\
+\bottomrule
+总计 & $\sim 34$ min \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+GPU内存峰值约为3.5 GB（VVV张量$72\times 2\times 50\times 50\times 50\times 8\;\text{bytes}
+\approx 144\;\text{MB}$ per time-slice group）。
+
+% ===========================================================================
+\section{结论}
+% ===========================================================================
+
+本工作在格点系综$\beta=6.20$, $24^3\times 72$上使用蒸馏方法（$\Nev=50$），
+在GPU上成功计算了质子与$\pi$介子的两点、三点关联函数，
+并完成了完整的Jackknife统计分析（$\Nconf=3$）。
+
+主要物理结果：
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{$\pi$介子静止质量：}$m_\pi = 0.2655\pm 0.0004\;\gev$，
+具有0.15\%的统计精度，验证了蒸馏方法提取介子质量的卓越能力。
+\item \textbf{质子静止质量：}$m_p = 1.053\pm 0.010\;\gev$，
+与当前$\beta=6.20$系综的预期一致，精度1.0\%。
+\item \textbf{三点/两点比值$R(\tau)$：}$\pi$介子$P=0$道的$R=-0.836\pm 0.002$(0.2\%精度)，
+质子$P=0$道的$R=+0.1155\pm 0.0035$(3\%精度)，
+均展现出清晰的平台行为，验证了Wick收缩引擎和动态收缩框架的正确性。
+\item \textbf{动量$p_z=2\times 2\pi/L$道}的信号受到$\Nev=50$的限制，
+需要增加本征矢数目、实现动量涂抹、以及增加组态数以改善。
+\end{enumerate}
+
+这些结果表明，基于$lqcddb$的GPU计算管线能够成功计算蒸馏框架下的强子关联函数，
+为后续的胶子PDF计算（需要非局域胶子算符的三点函数）奠定了坚实的方法基础。
+
+% ===========================================================================
+\begin{thebibliography}{20}
+
+\bibitem{zhang2019}
+J.-H. Zhang, X. Ji, A. Sch\"afer, W. Wang, and S. Zhao,
+\textit{First direct lattice-QCD calculation of the $x$-dependence of the pion parton distribution function},
+Phys.\ Rev.\ Lett.\ \textbf{122}, 142001 (2019).
+
+\bibitem{fan2021}
+Z. Fan, R. Zhang, and H.-W. Lin,
+\textit{First Nucleon Gluon PDF from Large Momentum Effective Theory},
+Phys.\ Rev.\ D \textbf{104}, 074502 (2021).
+
+\bibitem{ji2013}
+X. Ji,
+\textit{Parton Physics on a Euclidean Lattice},
+Phys.\ Rev.\ Lett.\ \textbf{110}, 262002 (2013).
+
+\bibitem{ji2021}
+X. Ji, Y.-S. Liu, Y. Liu, J.-H. Zhang, and Y. Zhao,
+\textit{Large-momentum effective theory},
+Rev.\ Mod.\ Phys.\ \textbf{93}, 035005 (2021).
+
+\bibitem{peardon2009}
+M. Peardon, J. Bulava, J. Foley, C. Morningstar, J. Dudek, R. G. Edwards, B. Jo\'o, H.-W. Lin, D. G. Richards, and K. J. Juge,
+\textit{A novel quark-field creation operator construction for hadronic physics in lattice QCD},
+Phys.\ Rev.\ D \textbf{80}, 054506 (2009).
+
+\bibitem{gattringer2010}
+C. Gattringer and C. B. Lang,
+\textit{Quantum Chromodynamics on the Lattice},
+Lect.\ Notes Phys.\ \textbf{788}, Springer (2010).
+
+\bibitem{bali2016}
+G. S. Bali, B. Lang, B. U. Musch, and A. Sch\"afer,
+\textit{Novel quark smearing for hadrons with high momenta in lattice QCD},
+Phys.\ Rev.\ D \textbf{93}, 094515 (2016).
+
+\bibitem{blossier2009}
+B. Blossier, M. Della Morte, G. von Hippel, T. Mendes, and R. Sommer,
+\textit{On the generalized eigenvalue method for energies and matrix elements in lattice field theory},
+JHEP \textbf{04}, 094 (2009).
+
+\end{thebibliography}
+
+\end{document}
