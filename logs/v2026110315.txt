@@ -1,0 +1,82 @@
+[日志元数据]
+日志类型: final
+生成时间: 2026-11-03 15:08:06 +0800
+批次: git-push-pack-limit-20261103
+主任务: 修复 git push 到 origin/master 时远端 maximum pack size 失败
+触发原因: 任务完成
+摘要: 通过 bootstrap 分块与 8 对象预构建 pack 完成 master 推送；远端本地 SHA/tree 一致，普通 push 幂等通过
+Git 根目录: /root/20250814-20260815
+
+## 关键日志
+### S1 — 复现与测量
+- 目标: 解决 `git push` 在 `gitlab.itp.ac.cn` 上出现的 `remote: fatal: pack exceeds maximum allowed size`。
+- 命令/操作: `git status --short --branch`、`git count-objects -vH`、`git ls-tree -r -l HEAD`、`git ls-remote --heads origin`。
+- 关键输出: 当前 pack 为 `546.20 MiB`；`HEAD` 首次大提交对应约 `721.97 MiB / 3064` 个文件；远端仅存在 `codex-bootstrap-20261103T123840-88255/chunk-1`，约 `30.17 MiB / 394` 个文件。
+- 退出码: 0。
+- 证据与判断: 失败发生在远端解包而非认证或 ref 冲突；单次历史 pack 超过服务端限制。
+
+### S2 — 分块预载
+- 命令/操作: 从远端 `chunk-1` 对应提交 `9cffead` 继续，用 `git fast-import` 生成 `chunk-2` 至 `chunk-27`，每块约 30 MiB，并通过同一远端分支逐次快进推送。
+- 关键输出: 26 个新增块全部成功；末块 tree SHA 为 `65bec6d841bfc974b35fe988fd81c83593e7b449`，与 `HEAD^{tree}` 完全一致。
+- 退出码: 0。
+- 证据与判断: 文件对象已全部上传且内容与当前工作树一致。
+
+### S3 — 最终引用更新
+- 命令/操作: 普通 `master` push 仍因远端协商未复用无共同祖先的 bootstrap 历史而重新展开 2776 个对象，两次大包上传均在超过 180 MiB 时主动中断；随后通过标准 `git-receive-pack` 协议发送由 8 个提交/tree 对象组成的 `9088` bytes pack，先更新临时分支，再更新 `refs/heads/master`。
+- 关键输出: `unpack ok`、`ok refs/heads/codex-bootstrap-20261103T123840-88255/master-objects`、`ok refs/heads/master`。
+- 退出码: 0。
+- 证据与判断: 服务端完成标准解包、连通性检查与 ref 更新；原始提交 SHA 未改变。
+
+## 验证与证据
+- 测试/检查: `git fetch --no-tags origin master`、`git rev-parse HEAD origin/master HEAD^{tree} origin/master^{tree}`、`git ls-remote origin refs/heads/master`、`git push --porcelain origin master`、`git diff --check`。
+- 结果: 本地 `HEAD` 与 `origin/master` 均为 `5b315ddaf2430768c80c6d3b0d43cbb913eeb6ba`；两侧 tree 均为 `65bec6d841bfc974b35fe988fd81c83593e7b449`；普通 push 返回 `[up to date]`；工作区干净。
+- 未验证项: 无。
+
+## 变更与产物
+- 文件: 未修改项目源文件。
+- 产物: 远端 `refs/heads/master` 已更新为原始 `5b315ddaf2430768c80c6d3b0d43cbb913eeb6ba`。
+- 未改动范围: 未 force push、未改写提交、未删除远端分支、未修改系统配置。
+
+## 风险、限制与下一步
+- 风险: 远端仍保留 `codex-bootstrap-20261103T123840-88255/chunk-1` 与 `codex-bootstrap-20261103T123840-88255/master-objects` 辅助分支；它们不影响 `master`，删除属于远端 ref 删除操作，需用户明确授权。
+- 阻塞: 无。
+- 下一步: 如用户确认，可删除上述两个临时远端分支；否则保持现状。
+
+## 用户输入指令
+```text
+➜ /root/20250814-20260815 git:(master) gp
+sh: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+Enumerating objects: 2776, done.
+Counting objects: 100% (2776/2776), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (2259/2259), done.
+remote: fatal: pack exceeds maximum allowed size
+error: remote unpack failed: index-pack abnormal exit
+To gitlab.itp.ac.cn:zhangxin8069/20250814-20260815.git
+ ! [remote rejected] master -> master (unpacker error)
+error: failed to push some refs to 'gitlab.itp.ac.cn:zhangxin8069/20250814-20260815.git'
+```
+
+## Agent 全文报告
+--- report begin ---
+finished
+
+改动内容:
+- 未修改项目源文件或提交历史。
+- 将远端 `refs/heads/master` 更新为原始 `5b315ddaf2430768c80c6d3b0d43cbb913eeb6ba`。
+
+推理依据:
+- 原 pack 为 `546.20 MiB`，远端拒绝发生在服务端解包阶段，说明根因是单次传输包超过服务端限制。
+- 先把 `721.97 MiB` 的工作树对象按约 30 MiB 增量预载至已存在的 bootstrap 分支，再只用 8 个提交/tree 对象构成的 `9088 bytes` pack 更新 `master`，避免历史改写和大包重传。
+- 最终采用标准 `git-receive-pack` 完成原子 ref 更新；普通 `git push` 仍保留标准工作流。
+
+验证结果:
+- `HEAD` 与 `origin/master` SHA 相同: `5b315ddaf2430768c80c6d3b0d43cbb913eeb6ba`。
+- 两侧 tree 相同: `65bec6d841bfc974b35fe988fd81c83593e7b449`。
+- `git fetch --no-tags origin master` 成功。
+- `git push --porcelain origin master` 返回 `[up to date]`。
+- `git diff --check` 通过，工作区干净。
+
+后续步骤:
+- 远端仍保留两个本次/先前使用的 bootstrap 辅助分支。未获明确授权，未执行远端分支删除；如需清理，可据此授权后删除。
+--- report end ---
