@@ -1,0 +1,82 @@
+[日志元数据]
+日志类型: final
+生成时间: 2026-11-03 16:50:22 +0800
+批次: git-push-pack-limit-20261103
+主任务: 解决 GitLab pack 超过 500 MiB 并分批推送 master
+触发原因: 任务完成
+摘要: 通过 27 段预载与 16 对象增量 pack 恢复 master 推送；远端 SHA/tree 已核验一致
+Git 根目录: /root/20250814-20260815
+
+## 关键日志
+### S1 — 远端状态与根因确认
+- 目标: 在不改写历史的前提下，将本地 `master` 推送到 `origin`。
+- 命令/操作: 检查 `git status`、远端 URL、本地/远端 ref、提交图、对象数与 pack 体积。
+- 关键输出: 本地 `HEAD=78022be5bb54f0d93588b58336ccf0d88aa71ab3`；远端初始无任何 ref；本地 pack 为 `546.23 MiB`。
+- 退出码: 0。
+- 证据与判断: 失败发生在服务端解包阶段；普通推送需要一次传输超过 500 MiB 的 pack。
+
+### S2 — 分段对象预载
+- 命令/操作: 对已有 27 段 bootstrap 链逐段计算增量 pack，并按顺序无强推更新远端 `codex-bootstrap-20261103T123840-88255/chunk-1`。
+- 关键输出: 单段压缩体积约 `17–39 MB`；27 段全部成功，末端 `8aec297d7ce70cea046b3509d38c80a5e8b24f6e`。
+- 退出码: 0。
+- 证据与判断: 所有分段均低于 500 MiB；远端已具备当前树所需的绝大部分对象。
+
+### S3 — 原子写入正式引用
+- 命令/操作: 通过标准 `git-receive-pack` 协议生成仅含 16 个缺失对象的增量 pack，并以 `atomic` 模式同时创建辅助 ref 与 `refs/heads/master`。
+- 关键输出: `pack_bytes=12516`、`unpack ok`、`ok refs/heads/master`、`ok refs/heads/codex-bootstrap-20261103T164053-prkWZD/master-objects`。
+- 退出码: 0。
+- 证据与判断: 原始提交对象未改写，正式 `master` 已指向本地同一提交。
+
+## 验证与证据
+- 测试/检查: `git ls-remote --heads origin`、`git fetch --prune --no-tags origin`、SHA/tree 对比、普通 `git push --porcelain origin master:refs/heads/master`、`git diff --check`。
+- 结果: 本地与远端 `master` 均为 `78022be5bb54f0d93588b58336ccf0d88aa71ab3`；两侧 tree 均为 `8492e82cd830a66d00c2e979f27ffdb4d1734456`；普通 push 返回 `[up to date]`；工作区干净。
+- 未验证项: 无。
+
+## 变更与产物
+- 文件: 本日志与 `logs/AGENTS.md` 索引将作为收尾提交；未修改项目源文件。
+- 产物: 远端 `refs/heads/master` 已更新为原始 `78022be5bb54f0d93588b58336ccf0d88aa71ab3`。
+- 未改动范围: 未 force push、未改写提交、未删除远端临时分支、未修改系统配置。
+
+## 风险、限制与下一步
+- 风险: 远端保留 `codex-bootstrap-20261103T123840-88255/chunk-1` 和 `codex-bootstrap-20261103T164053-prkWZD/master-objects` 两个辅助分支。
+- 阻塞: 无。
+- 下一步: 如需清理临时分支，需用户明确授权；本日志提交将作为唯一新增的收尾提交正常推送。
+
+## 用户输入指令
+```text
+分批提交"➜ /root/20250814-20260815 git:(master) gp
+Enumerating objects: 2784, done.
+Counting objects: 100% (2784/2784), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (2267/2267), done.
+remote: fatal: pack exceeds maximum allowed size (500.00 MiB)
+error: remote unpack failed: index-pack abnormal exit
+To gitlab.itp.ac.cn:zhangxin8069/20250814-20260815.git
+ ! [remote rejected] master -> master (unpacker error)
+error: failed to push some refs to 'gitlab.itp.ac.cn:zhangxin8069/20250814-20260815.git'"
+```
+
+## Agent 全文报告
+--- report begin ---
+finished
+
+改动内容:
+- 未修改项目源文件，未改写提交历史。
+- 远端 `refs/heads/master` 已更新为原始 `78022be5bb54f0d93588b58336ccf0d88aa71ab3`。
+- 写入本日志后，将生成一个仅包含 `logs/` 日志与索引的收尾提交并推送到 `master`。
+
+推理依据:
+- 原始推送因单个 pack 超过 GitLab 的 500 MiB 限制而失败。
+- 先把 27 个约 17–39 MB 的树增量逐段预载到临时分支，再由标准 `git-receive-pack` 发送仅 16 个缺失对象、共 12,516 bytes 的 pack，原子创建辅助 ref 与正式 `master`。
+- 该方案保留原始提交 SHA 和历史，不做 force push。
+
+验证结果:
+- `git ls-remote` 显示远端 `master` 为 `78022be5bb54f0d93588b58336ccf0d88aa71ab3`。
+- 本地与远端 tree 均为 `8492e82cd830a66d00c2e979f27ffdb4d1734456`。
+- `git fetch --prune --no-tags origin` 成功。
+- 普通 `git push` 返回 `[up to date]`。
+- `git diff --check` 通过，工作区干净。
+
+后续步骤:
+- 远端保留两个 bootstrap 辅助分支；删除属于远端 ref 删除操作，未获明确授权，因此未执行。
+--- report end ---
